@@ -245,13 +245,15 @@ final class HTTPFuture extends BaseHTTPFuture {
     if ($this->getMethod() == 'GET') {
       if (is_array($data)) {
         $data = http_build_query($data, '', '&');
+      }
+      if ($data) {
         if (strpos($uri, '?') !== false) {
           $uri .= '&'.$data;
         } else {
           $uri .= '?'.$data;
         }
-        $data = '';
       }
+      $data = '';
     } else {
       if (is_array($data)) {
         $data = http_build_query($data, '', '&')."\r\n";
