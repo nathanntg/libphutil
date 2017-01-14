@@ -9,27 +9,33 @@ _____
 ---
 
 - - - - - - -
+
+ ---
 ~~~~~~~~~~
-<hr />
+<hr class="remarkup-hr" />
 
-<hr />
+<hr class="remarkup-hr" />
 
-<hr />
+<hr class="remarkup-hr" />
 
-<hr />
+<hr class="remarkup-hr" />
 
-<hr />
+<hr class="remarkup-hr" />
 
-<hr />
+<hr class="remarkup-hr" />
+
+<hr class="remarkup-hr" />
 ~~~~~~~~~~
-<hr />
+___
 
-<hr />
+_____
 
-<hr />
+***
 
-<hr />
+* * * * * * *
 
-<hr />
+---
 
-<hr />
+- - - - - - -
+
+ ---

@@ -4,7 +4,7 @@
 require_once dirname(dirname(__FILE__)).'/__init_script__.php';
 
 $args = new PhutilArgumentParser($argv);
-$args->setTagline('utf8 charset test script');
+$args->setTagline(pht('utf8 charset test script'));
 $args->setSynopsis(<<<EOHELP
 **utf8.php** [-C n] __file__ ...
     Show regions in files which are not valid UTF-8. With "-C n",
@@ -22,6 +22,7 @@ $args->setSynopsis(<<<EOHELP
     valid UTF-8.
 EOHELP
 );
+
 $args->parseStandardArguments();
 $args->parse(array(
   array(
@@ -29,15 +30,16 @@ $args->parse(array(
     'short'     => 'C',
     'param'     => 'lines',
     'default'   => 3,
-    'help'      => 'Show __lines__ lines of context instead of the default 3.',
+    'help'      => pht(
+      'Show __lines__ lines of context instead of the default 3.'),
     'conflicts' => array(
-      'test' => 'with --test, context is not shown.',
+      'test' => pht('with %s, context is not shown.', '--test'),
     ),
   ),
   array(
     'name'      => 'test',
     'short'     => 't',
-    'help'      => 'Print file names containing invalid UTF-8 to stdout.',
+    'help'      => pht('Print file names containing invalid UTF-8 to stdout.'),
   ),
   array(
     'name'      => 'files',
@@ -63,7 +65,7 @@ exit($err);
 
 
 function read($file) {
-  if ($file == '-') {
+  if ($file === '-') {
     return file_get_contents('php://stdin');
   } else {
     return Filesystem::readFile($file);
@@ -71,7 +73,7 @@ function read($file) {
 }
 
 function name($file) {
-  if ($file == '-') {
+  if ($file === '-') {
     return 'stdin';
   } else {
     return $file;
@@ -94,11 +96,11 @@ function show(array $files, $context) {
     $data = read($file);
     $ok = phutil_is_utf8($data);
     if ($ok) {
-      echo 'OKAY';
+      echo pht('OKAY');
     } else {
-      echo 'FAIL';
+      echo pht('FAIL');
     }
-    echo "  ".name($file)."\n";
+    echo '  '.name($file)."\n";
 
     if (!$ok) {
       $lines = explode("\n", $data);
@@ -119,12 +121,12 @@ function show(array $files, $context) {
 
       $width = strlen(max(array_keys($map)));
 
-      // Set $last such that we print a newline on the first iteration thorugh
+      // Set $last such that we print a newline on the first iteration through
       // the loop.
       $last = -2;
       foreach ($map as $idx => $ignored) {
-        if ($idx != $last + 1) {
-          printf("\n");
+        if ($idx !== $last + 1) {
+          echo "\n";
         }
         $last = $idx;
 
@@ -137,7 +139,6 @@ function show(array $files, $context) {
       }
       echo "\n";
     }
-
   }
 
   return 0;

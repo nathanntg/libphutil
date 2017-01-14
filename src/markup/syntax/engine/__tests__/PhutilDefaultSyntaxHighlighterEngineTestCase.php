@@ -2,8 +2,6 @@
 
 /**
  * Test cases for @{class:PhutilDefaultSyntaxHighlighterEngine}.
- *
- * @group testcase
  */
 final class PhutilDefaultSyntaxHighlighterEngineTestCase
   extends PhutilTestCase {
@@ -20,7 +18,10 @@ final class PhutilDefaultSyntaxHighlighterEngineTestCase
     $engine = new PhutilDefaultSyntaxHighlighterEngine();
     foreach ($names as $path => $language) {
       $detect = $engine->getLanguageFromFilename($path);
-      $this->assertEqual($language, $detect, 'Language detect for '.$path);
+      $this->assertEqual(
+        $language,
+        $detect,
+        pht('Language detect for %s', $path));
     }
   }
 

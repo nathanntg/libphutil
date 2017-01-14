@@ -1,11 +1,9 @@
 <?php
 
 /**
- * An abstract abstract syntax tree. YESSSSSSS.
- *
- * @group aast
+ * An abstract abstract syntax tree.
  */
-abstract class AASTTree {
+abstract class AASTTree extends Phobject {
 
   protected $tree = array();
   protected $stream = array();
@@ -45,70 +43,79 @@ abstract class AASTTree {
     $this->buildTree(array($tree));
   }
 
-  public function setTreeType($description) {
+  final public function setTreeType($description) {
     $this->treeType = $description;
     return $this;
   }
 
-  public function getTreeType() {
+  final public function getTreeType() {
     return $this->treeType;
   }
 
-  public function setTokenConstants(array $token_map) {
+  final public function setTokenConstants(array $token_map) {
     $this->tokenConstants = $token_map;
     $this->tokenReverseMap = array_flip($token_map);
     return $this;
   }
 
-  public function setNodeConstants(array $node_map) {
+  final public function setNodeConstants(array $node_map) {
     $this->nodeConstants = $node_map;
     $this->nodeReverseMap = array_flip($node_map);
     return $this;
   }
 
-  public function getNodeTypeNameFromTypeID($type_id) {
+  final public function getNodeTypeNameFromTypeID($type_id) {
     if (empty($this->nodeConstants[$type_id])) {
       $tree_type = $this->getTreeType();
       throw new Exception(
-        "No type name for node type ID '{$type_id}' in '{$tree_type}' AAST.");
+        pht(
+          "No type name for node type ID '%s' in '%s' AAST.",
+          $type_id,
+          $tree_type));
     }
 
     return $this->nodeConstants[$type_id];
   }
 
-  public function getNodeTypeIDFromTypeName($type_name) {
+  final public function getNodeTypeIDFromTypeName($type_name) {
     if (empty($this->nodeReverseMap[$type_name])) {
       $tree_type = $this->getTreeType();
       throw new Exception(
-        "No type ID for node type name '{$type_name}' in '{$tree_type}' AAST.");
+        pht(
+          "No type ID for node type name '%s' in '%s' AAST.",
+          $type_name,
+          $tree_type));
     }
     return $this->nodeReverseMap[$type_name];
   }
 
-
-  public function getTokenTypeNameFromTypeID($type_id) {
+  final public function getTokenTypeNameFromTypeID($type_id) {
     if (empty($this->tokenConstants[$type_id])) {
       $tree_type = $this->getTreeType();
       throw new Exception(
-        "No type name for token type ID '{$type_id}' ".
-        "in '{$tree_type}' AAST.");
+        pht(
+          "No type name for token type ID '%s' in '%s' AAST.",
+          $type_id,
+          $tree_type));
     }
     return $this->tokenConstants[$type_id];
   }
 
-  public function getTokenTypeIDFromTypeName($type_name) {
+  final public function getTokenTypeIDFromTypeName($type_name) {
     if (empty($this->tokenReverseMap[$type_name])) {
       $tree_type = $this->getTreeType();
       throw new Exception(
-        "No type ID for token type name '{$type_name}' ".
-        "in '{$tree_type}' AAST.");
+        pht(
+          "No type ID for token type name '%s' in '%s' AAST.",
+          $type_name,
+          $tree_type));
     }
     return $this->tokenReverseMap[$type_name];
   }
 
-
   /**
-   * Unlink internal datastructures so that PHP's will garbage collect the tree.
+   * Unlink internal datastructures so that PHP will garbage collect the tree.
+   *
    * This renders the object useless.
    *
    * @return void
@@ -119,7 +126,7 @@ abstract class AASTTree {
     unset($this->stream);
   }
 
-  public function getRootNode() {
+  final public function getRootNode() {
     return $this->tree[0];
   }
 
@@ -134,10 +141,24 @@ abstract class AASTTree {
     foreach ($nodes as $node_id => $node) {
       if (isset($node[3])) {
         $children = $this->buildTree($node[3]);
-        foreach ($children as $child) {
-          $child->parentNode = $this->tree[$node_id];
+        $previous_child = null;
+
+        foreach ($children as $ii => $child) {
+          $child->setParentNode($this->tree[$node_id]);
+          $child->setPreviousSibling($previous_child);
+
+          if ($previous_child) {
+            $previous_child->setNextSibling($child);
+          }
+
+          $previous_child = $child;
         }
-        $this->tree[$node_id]->children = $children;
+
+        if ($previous_child) {
+          $previous_child->setNextSibling($child);
+        }
+
+        $this->tree[$node_id]->setChildren($children);
       }
     }
 
@@ -149,26 +170,9 @@ abstract class AASTTree {
     return $result;
   }
 
-  public function getRawTokenStream() {
+  final public function getRawTokenStream() {
     return $this->stream;
   }
-
-  public function renderAsText() {
-    return $this->executeRenderAsText(array($this->getRootNode()), 0);
-  }
-
-  protected function executeRenderAsText($list, $depth) {
-    $return = '';
-    foreach ($list as $node) {
-      if ($depth) {
-        $return .= str_repeat('  ', $depth);
-      }
-      $return .= $node->getDescription()."\n";
-      $return .= $this->executeRenderAsText($node->getChildren(), $depth + 1);
-    }
-    return $return;
-  }
-
 
   public function getOffsetToLineNumberMap() {
     if ($this->lineMap === null) {

@@ -1,13 +1,18 @@
 {
   "exclude": [
     "(^externals/)",
-    "(^src/console/__tests__/wrap/.*\\.txt(\\.expect)?$)",
-    "(^src/markup/engine/__tests__/remarkup/.*\\.txt$)",
-    "(^src/markup/syntax/highlighter/__tests__/xhpast/.*\\.(expect|source)$)"
+    "(/__tests__/data/)"
   ],
   "linters": {
     "chmod": {
       "type": "chmod"
+    },
+    "cppcheck": {
+      "type": "cppcheck",
+      "include": [
+        "(\\.cpp$)",
+        "(\\.hpp$)"
+      ]
     },
     "filename": {
       "type": "filename"
@@ -15,36 +20,46 @@
     "generated": {
       "type": "generated"
     },
+    "json": {
+      "type": "json",
+      "include": [
+        "(^\\.arcconfig$)",
+        "(^\\.arclint$)",
+        "(\\.json$)"
+      ]
+    },
     "merge-conflict": {
       "type": "merge-conflict"
     },
     "nolint": {
       "type": "nolint"
     },
-    "phutil-xhpast": {
-      "type": "phutil-xhpast",
-      "include": "(\\.php$)"
-    },
     "phutil-library": {
       "type": "phutil-library",
       "include": "(\\.php$)"
     },
-    "text": {
-      "type": "text"
-    },
     "spelling": {
       "type": "spelling"
+    },
+    "text": {
+      "type": "text",
+      "exclude": [
+        "(^src/(.*/)?__tests__/[^/]+/.*\\.(txt|json|expect))"
+      ]
+    },
+    "text-without-length": {
+      "type": "text",
+      "include": [
+        "(^src/(.*/)?__tests__/[^/]+/.*\\.(txt|json|expect))"
+      ],
+      "severity": {
+        "3": "disabled"
+      }
     },
     "xhpast": {
       "type": "xhpast",
       "include": "(\\.php$)",
-      "severity": {
-        "16": "advice",
-        "29": "warning",
-        "31": "error",
-        "34": "error",
-        "35": "error"
-      }
+      "standard": "phutil.xhpast"
     }
   }
 }

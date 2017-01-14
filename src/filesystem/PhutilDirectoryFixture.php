@@ -1,9 +1,6 @@
 <?php
 
-/**
- * @group filesystem
- */
-final class PhutilDirectoryFixture {
+final class PhutilDirectoryFixture extends Phobject {
 
   protected $path;
 
@@ -44,7 +41,7 @@ final class PhutilDirectoryFixture {
 
     $ok = rename($tmp, Filesystem::resolvePath($path));
     if (!$ok) {
-      throw new FilesystemException($path, 'Failed to overwrite file.');
+      throw new FilesystemException($path, pht('Failed to overwrite file.'));
     }
 
     return $this;

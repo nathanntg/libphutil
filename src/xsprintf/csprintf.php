@@ -1,8 +1,8 @@
 <?php
 
 /**
- * Format a shell command string. This function behaves like sprintf(), except
- * that all the normal conversions (like %s) will be properly escaped, and
+ * Format a shell command string. This function behaves like `sprintf`, except
+ * that all the normal conversions (like "%s") will be properly escaped, and
  * additional conversions are supported:
  *
  *   %Ls
@@ -13,7 +13,7 @@
  *
  *   %P
  *     Password (or other sensitive parameter) to escape. Pass a
- *     PhutilOpaqueEnvelope.
+ *     @{class:PhutilOpaqueEnvelope}.
  *
  *   %C (Raw Command)
  *     Passes the argument through without escaping. Dangerous!
@@ -24,42 +24,44 @@
  *     in any context. The intent is to produce prettier human-readable
  *     commands.
  *
- * Generally, you should invoke shell commands via execx() rather than by
- * calling csprintf() directly.
+ * Generally, you should invoke shell commands via @{function:execx} rather
+ * than by calling @{function:csprintf} directly.
  *
  * @param  string  sprintf()-style format string.
  * @param  ...     Zero or more arguments.
  * @return string  Formatted string, escaped appropriately for shell contexts.
- * @group exec
  */
-function csprintf($pattern/* , ... */) {
+function csprintf($pattern /* , ... */) {
   $args = func_get_args();
   return new PhutilCommandString($args);
 }
 
 /**
- * Version of csprintf() that takes a vector of arguments.
+ * Version of @{function:csprintf} that takes a vector of arguments.
  *
  * @param  string  sprintf()-style format string.
  * @param  list    List of zero or more arguments to csprintf().
  * @return string  Formatted string, escaped appropriately for shell contexts.
- * @group exec
  */
 function vcsprintf($pattern, array $argv) {
   array_unshift($argv, $pattern);
   return call_user_func_array('csprintf', $argv);
 }
 
-
 /**
- * xsprintf() callback for csprintf().
- * @group exec
+ * @{function:xsprintf} callback for @{function:csprintf}.
  */
 function xsprintf_command($userdata, &$pattern, &$pos, &$value, &$length) {
   $type = $pattern[$pos];
   $next = (strlen($pattern) > $pos + 1) ? $pattern[$pos + 1] : null;
 
   $is_unmasked = !empty($userdata['unmasked']);
+
+  if (empty($userdata['mode'])) {
+    $mode = PhutilCommandString::MODE_DEFAULT;
+  } else {
+    $mode = $userdata['mode'];
+  }
 
   if ($value instanceof PhutilCommandString) {
     if ($is_unmasked) {
@@ -78,7 +80,8 @@ function xsprintf_command($userdata, &$pattern, &$pos, &$value, &$length) {
 
       // Check that the value is a non-empty array.
       if (!is_array($value)) {
-        throw new Exception("Expected an array for %L{$next} conversion.");
+        throw new InvalidArgumentException(
+          pht('Expected an array for %%L%s conversion.', $next));
       }
 
       switch ($next) {
@@ -99,31 +102,31 @@ function xsprintf_command($userdata, &$pattern, &$pos, &$value, &$length) {
           break;
 
         default:
-          throw new Exception("Unknown conversion %L{$next}.");
+          throw new XsprintfUnknownConversionException("%L{$next}");
       }
       break;
 
     case 'R':
-      if (!preg_match('(^[a-zA-Z0-9:/@._-]+$)', $value)) {
-        $value = escapeshellarg($value);
+      if (!preg_match('(^[a-zA-Z0-9:/@._+-]+$)', $value)) {
+        $value = PhutilCommandString::escapeArgument($value, $mode);
       }
       $type = 's';
       break;
     case 's':
-      $value = escapeshellarg($value);
+      $value = PhutilCommandString::escapeArgument($value, $mode);
       $type = 's';
       break;
     case 'P':
       if (!($value instanceof PhutilOpaqueEnvelope)) {
-        throw new Exception(
-          'Expected PhutilOpaqueEnvelope for %P conversion.');
+        throw new InvalidArgumentException(
+          pht('Expected %s for %%P conversion.', 'PhutilOpaqueEnvelope'));
       }
       if ($is_unmasked) {
         $value = $value->openEnvelope();
       } else {
-        $value = 'xxxxx';
+        $value = '********';
       }
-      $value = escapeshellarg($value);
+      $value = PhutilCommandString::escapeArgument($value, $mode);
       $type = 's';
       break;
     case 'C':

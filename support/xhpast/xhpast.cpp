@@ -1,6 +1,4 @@
 #include "ast.hpp"
-#include <vector>
-#include <string>
 #include <iostream>
 #include <sstream>
 #include <fstream>
@@ -12,11 +10,9 @@ int xhpast_process(std::string &in);
 void print_node(xhpast::Node *node);
 
 int main(int argc, char* argv[]) {
-  vector<string> files;
-
   if (argc != 1) {
-    //coupling: modify also libphutil/src/parser/xhpast/bin/xhpast_parse.php
-    cout << "xhpast version 5.5.8/1e\n";
+    // Coupling: modify also src/parser/xhpast/bin/PhutilXHPASTBinary.php
+    cout << "7.0.3\n";
     return 0;
   }
 
@@ -41,11 +37,7 @@ int xhpast_process(std::string &in) {
 
   void* scanner;
   yy_extra_type extra;
-  extra.idx_expr = true;//flags.idx_expr;
-  extra.include_debug = true;//flags.include_debug;
   extra.insert_token = 0;//flags.eval ? T_OPEN_TAG_FAKE : 0;
-  extra.short_tags = true;//flags.short_tags;
-  extra.asp_tags = false;//flags.asp_tags;
 
   xhpast::Node *root = NULL;
 
@@ -98,19 +90,20 @@ int xhpast_process(std::string &in) {
 
 void print_node(xhpast::Node *node) {
   int l = -1;
-  int r = -1;
   if (node->l_tok != -1) {
     l = node->l_tok;
   }
 
   if (l == -1) {
-    printf("[%d]", node->type);
+    printf("[%u]", node->type);
   } else {
+    int r = -1;
+
     if (node->r_tok != -1) {
       r = node->r_tok;
     }
 
-    printf("[%d, %d, %d", node->type, l, r);
+    printf("[%u, %d, %d", node->type, l, r);
     if (!node->children.empty()) {
       printf(", [");
       for (xhpast::node_list_t::iterator ii = node->children.begin();;) {

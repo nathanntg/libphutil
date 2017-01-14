@@ -1,11 +1,9 @@
 #!/usr/bin/env php
 <?php
 
-require_once dirname(dirname(__FILE__)).'/__init_script__.php';
+require_once dirname(__FILE__).'/../__init_script__.php';
 
-// PhutilServiceProfiler::installEchoListener();
-
-if ($argc != 4) {
+if ($argc !== 4) {
   usage();
   exit(1);
 }
@@ -49,7 +47,7 @@ foreach ($hash_map as $path => $info) {
   if (!is_dir($dir)) {
     $ok = mkdir($dir, 0777, $recursive = true);
     if (!$ok) {
-      throw new Exception("Failed to make directory for '{$link}'!");
+      throw new Exception(pht("Failed to make directory for '%s'!", $link));
     }
   }
 
@@ -57,14 +55,14 @@ foreach ($hash_map as $path => $info) {
   if ($type == 'link') {
     $ok = symlink(readlink($soft.'/'.$path), $link);
     if (!$ok) {
-      throw new Exception("Failed to create symlink '{$link}'!");
+      throw new Exception(pht("Failed to create symlink '%s'!", $link));
     }
     continue;
   }
 
-  if ($type == 'exec') {
+  if ($type === 'exec') {
     // Multiple hardlinks share a single executable bit, so we need to keep
-    // executable versions separate from nonexecutable versions.
+    // executable versions separate from non-executable versions.
     $obj .= '.x';
   }
 
@@ -76,12 +74,11 @@ foreach ($hash_map as $path => $info) {
     if (!$stat) {
       break;
     }
-    if ($stat[3] < 32000) { // TODO: On NTFS, this needs to be 1023. It is
-                            // not apparently trivial to determine if a disk
-                            // is NTFS or not, or what the link limit for a
-                            // disk is. On linux "df -T /path/to/dir" may be
-                            // useful, but on OS X this does something totally
-                            // different...
+    if ($stat[3] < 32000) {
+      // TODO: On NTFS, this needs to be 1023. It is not apparently trivial to
+      // determine if a disk is NTFS or not, or what the link limit for a disk
+      // is. On linux "df -T /path/to/dir" may be useful, but on OS X this does
+      // something totally different...
       break;
     }
     ++$n;
@@ -92,23 +89,23 @@ foreach ($hash_map as $path => $info) {
   if ($stat === false) {
     $ok = mkdir(dirname($obj), 0777, $recursive = true);
     if (!$ok) {
-      throw new Exception("Failed to make directory for '{$obj}'.");
+      throw new Exception(pht("Failed to make directory for '%s'.", $obj));
     }
     $ok = copy($soft.'/'.$path, $obj);
     if (!$ok) {
-      throw new Exception("Failed to copy file '{$soft}/{$path}'!");
+      throw new Exception(pht("Failed to copy file '%s/%s'!", $soft, $path));
     }
-    if ($type == 'exec') {
+    if ($type === 'exec') {
       $ok = chmod($obj, 0755);
       if (!$ok) {
-        throw new Exception("Failed to chmod file '{$obj}'!");
+        throw new Exception(pht("Failed to chmod file '%s'!", $obj));
       }
     }
   }
 
   $ok = link($obj, $link);
   if (!$ok) {
-    throw new Exception("Failed to hardlink '{$obj}' to '{$link}'!");
+    throw new Exception(pht("Failed to hardlink '%s' to '%s'!", $obj, $link));
   }
 }
 
@@ -136,13 +133,13 @@ function map_directory($dir) {
         $matches = null;
         $regexp  = '/^(\d{6}) (\w+) ([a-z0-9]{40})\t(.*)$/';
         if (!preg_match($regexp, $line, $matches)) {
-          throw new Exception("Unable to parse line '{$line}'!");
+          throw new Exception(pht("Unable to parse line '%s'!", $line));
         }
         $flag = $matches[1];
         $type = $matches[2];
         $hash = $matches[3];
         $file = $matches[4];
-        if ($type == 'commit') {
+        if ($type === 'commit') {
           // Deal with Git submodules.
           $submap = map_directory($dir.'/'.$file);
           foreach ($submap as $subfile => $info) {
@@ -152,11 +149,9 @@ function map_directory($dir) {
           $mask = (int)base_convert($flag, 8, 10);
           $type = 'file';
           if ($mask & 0111) {
-
-            echo "EXEC: {$file}\n";
-
+            echo pht('EXEC: %s', $file)."\n";
             $type = 'exec';
-          } else if (($mask & 0120000) == 0120000) {
+          } else if (($mask & 0120000) === 0120000) {
             $type = 'link';
           }
           $map[$file] = array(

@@ -1,13 +1,11 @@
 <?php
 
 /**
- * Test cases for functions in utils.php.
- *
- * @group testcase
+ * Test cases for @{class:PhutilChunkedIterator}.
  */
 final class PhutilChunkedIteratorTestCase extends PhutilTestCase {
 
-  function testChunkedIterator() {
+  public function testChunkedIterator() {
     $expect = array(
       array(0 => 1, 1 => 3),
       array(2 => 5),
@@ -26,7 +24,6 @@ final class PhutilChunkedIteratorTestCase extends PhutilTestCase {
         $this->assertEqual(idx($expect, $key), $actual);
       }
     }
-
   }
 
 }

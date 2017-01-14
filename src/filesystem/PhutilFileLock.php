@@ -16,8 +16,6 @@
  *
  * @task  construct   Constructing Locks
  * @task  impl        Implementation
- *
- * @group filesystem
  */
 final class PhutilFileLock extends PhutilLock {
 
@@ -73,7 +71,7 @@ final class PhutilFileLock extends PhutilLock {
     if (!$handle) {
       throw new FilesystemException(
         $path,
-        "Unable to open lock '{$path}' for writing!");
+        pht("Unable to open lock '%s' for writing!", $path));
     }
 
     $start_time = microtime(true);
@@ -107,14 +105,15 @@ final class PhutilFileLock extends PhutilLock {
   protected function doUnlock() {
     $ok = flock($this->handle, LOCK_UN | LOCK_NB);
     if (!$ok) {
-      throw new Exception('Unable to unlock file!');
+      throw new Exception(pht('Unable to unlock file!'));
     }
 
     $ok = fclose($this->handle);
     if (!$ok) {
-      throw new Exception('Unable to close file!');
+      throw new Exception(pht('Unable to close file!'));
     }
 
     $this->handle = null;
   }
+
 }

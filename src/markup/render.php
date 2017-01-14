@@ -22,7 +22,6 @@
  * @return PhutilSafeHTML Tag object.
  */
 function phutil_tag($tag, array $attributes = array(), $content = null) {
-
   // If the `href` attribute is present:
   //   - make sure it is not a "javascript:" URI. We never permit these.
   //   - if the tag is an `<a>` and the link is to some foreign resource,
@@ -69,10 +68,11 @@ function phutil_tag($tag, array $attributes = array(), $content = null) {
         if (preg_match('/^javascript:/i', $normalized_href)) {
           throw new Exception(
             pht(
-              "Attempting to render a tag with an 'href' attribute that ".
-              "begins with 'javascript:'. This is either a serious security ".
-              "concern or a serious architecture concern. Seek urgent ".
-              "remedy."));
+              "Attempting to render a tag with an '%s' attribute that begins ".
+              "with '%s'. This is either a serious security concern or a ".
+              "serious architecture concern. Seek urgent remedy.",
+              'href',
+              'javascript:'));
         }
       }
     }
@@ -122,16 +122,10 @@ function phutil_tag($tag, array $attributes = array(), $content = null) {
   return new PhutilSafeHTML('<'.$tag.$attr_string.'>'.$content.'</'.$tag.'>');
 }
 
-/**
- * @group markup
- */
 function phutil_tag_div($class, $content = null) {
   return phutil_tag('div', array('class' => $class), $content);
 }
 
-/**
- * @group markup
- */
 function phutil_escape_html($string) {
   if ($string instanceof PhutilSafeHTML) {
     return $string;
@@ -148,11 +142,13 @@ function phutil_escape_html($string) {
         assert_stringlike($result);
         return phutil_escape_html((string)$result);
       } catch (Exception $ex) {
-        $class = get_class($string);
         throw new Exception(
-          "Object (of class '{$class}') implements ".
-          "PhutilSafeHTMLProducerInterface but did not return anything ".
-          "renderable from producePhutilSafeHTML().");
+          pht(
+            "Object (of class '%s') implements %s but did not return anything ".
+            "renderable from %s.",
+            get_class($string),
+            'PhutilSafeHTMLProducerInterface',
+            'producePhutilSafeHTML()'));
       }
     }
   } else if (is_array($string)) {
@@ -166,17 +162,12 @@ function phutil_escape_html($string) {
   return htmlspecialchars($string, ENT_QUOTES, 'UTF-8');
 }
 
-/**
- * @group markup
- */
 function phutil_escape_html_newlines($string) {
   return PhutilSafeHTML::applyFunction('nl2br', $string);
 }
 
 /**
  * Mark string as safe for use in HTML.
- *
- * @group markup
  */
 function phutil_safe_html($string) {
   if ($string == '') {
@@ -189,9 +180,7 @@ function phutil_safe_html($string) {
 }
 
 /**
- * HTML safe version of implode().
- *
- * @group markup
+ * HTML safe version of `implode()`.
  */
 function phutil_implode_html($glue, array $pieces) {
   $glue = phutil_escape_html($glue);
@@ -204,12 +193,10 @@ function phutil_implode_html($glue, array $pieces) {
 }
 
 /**
- * Format a HTML code. This function behaves like sprintf(), except that all
+ * Format a HTML code. This function behaves like `sprintf()`, except that all
  * the normal conversions (like %s) will be properly escaped.
- *
- * @group markup
  */
-function hsprintf($html/* , ... */) {
+function hsprintf($html /* , ... */) {
   $args = func_get_args();
   array_shift($args);
   return new PhutilSafeHTML(
@@ -239,8 +226,6 @@ function hsprintf($html/* , ... */) {
  *
  * @param   string  Some string.
  * @return  string  URI encoded string, except for '/'.
- *
- * @group markup
  */
 function phutil_escape_uri($string) {
   return str_replace('%2F', '/', rawurlencode($string));
@@ -262,8 +247,6 @@ function phutil_escape_uri($string) {
  *
  * @param   string  Some string.
  * @return  string  URI encoded string that is safe for infix composition.
- *
- * @group markup
  */
 function phutil_escape_uri_path_component($string) {
   return rawurlencode(rawurlencode($string));
@@ -284,7 +267,6 @@ function phutil_escape_uri_path_component($string) {
  *                from @{function:phutil_escape_uri_path_component} and
  *                then accessed via a web server.
  * @return string Original string.
- * @group markup
  */
 function phutil_unescape_uri_path_component($string) {
   return rawurldecode($string);

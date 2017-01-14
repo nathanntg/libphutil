@@ -11,7 +11,7 @@
  * @task config   Parser Configuration
  * @task internal Internals
  */
-final class PhutilSimpleOptions {
+final class PhutilSimpleOptions extends Phobject {
 
   private $caseSensitive;
 
@@ -177,7 +177,7 @@ final class PhutilSimpleOptions {
 
   private function normalizeKey($key) {
     if (!strlen($key)) {
-      throw new Exception('Empty key is invalid!');
+      throw new Exception(pht('Empty key is invalid!'));
     }
     if (!$this->caseSensitive) {
       $key = strtolower($key);

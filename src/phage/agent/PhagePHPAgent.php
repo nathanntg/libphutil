@@ -1,6 +1,6 @@
 <?php
 
-final class PhagePHPAgent {
+final class PhagePHPAgent extends Phobject {
 
   private $stdin;
   private $master;
@@ -48,7 +48,7 @@ final class PhagePHPAgent {
 
     $open = $channel->update();
     if (!$open) {
-      throw new Exception('Channel closed!');
+      throw new Exception(pht('Channel closed!'));
     }
 
     while (true) {
@@ -87,6 +87,7 @@ final class PhagePHPAgent {
         'stdout'  => $result[1],
         'stderr'  => $result[2],
       ));
+    unset($this->exec[$key]);
   }
 
   public function __destruct() {

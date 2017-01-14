@@ -1,10 +1,7 @@
 <?php
 
-/**
- * @group storage
- */
 final class AphrontMySQLDatabaseConnection
-  extends AphrontMySQLDatabaseConnectionBase {
+  extends AphrontBaseMySQLDatabaseConnection {
 
   public function escapeUTF8String($string) {
     $this->validateUTF8String($string);
@@ -34,8 +31,9 @@ final class AphrontMySQLDatabaseConnection
       // installed, which has bitten me on three separate occasions. Make sure
       // such failures are explicit and loud.
       throw new Exception(
-        'About to call mysql_connect(), but the PHP MySQL extension is not '.
-        'available!');
+        pht(
+          'About to call %s, but the PHP MySQL extension is not available!',
+          'mysql_connect()'));
     }
 
     $user = $this->getConfiguration('user');
@@ -53,19 +51,35 @@ final class AphrontMySQLDatabaseConnection
       $pass = $pass->openEnvelope();
     }
 
-    $conn = @mysql_connect(
-      $host,
-      $user,
-      $pass,
-      $new_link = true,
-      $flags = 0);
+    $timeout = $this->getConfiguration('timeout');
+    $timeout_ini = 'mysql.connect_timeout';
+    if ($timeout) {
+      $old_timeout = ini_get($timeout_ini);
+      ini_set($timeout_ini, $timeout);
+    }
+
+    try {
+      $conn = @mysql_connect(
+        $host,
+        $user,
+        $pass,
+        $new_link = true,
+        $flags = 0);
+    } catch (Exception $ex) {
+      if ($timeout) {
+        ini_set($timeout_ini, $old_timeout);
+      }
+      throw $ex;
+    }
+
+    if ($timeout) {
+      ini_set($timeout_ini, $old_timeout);
+    }
 
     if (!$conn) {
       $errno = mysql_errno();
       $error = mysql_error();
-      throw new AphrontQueryConnectionException(
-        "Attempt to connect to {$user}@{$host} failed with error ".
-        "#{$errno}: {$error}.", $errno);
+      $this->throwConnectionException($errno, $error, $user, $host);
     }
 
     if ($database !== null) {
@@ -75,7 +89,10 @@ final class AphrontMySQLDatabaseConnection
       }
     }
 
-    mysql_set_charset('utf8', $conn);
+    $ok = @mysql_set_charset('utf8mb4', $conn);
+    if (!$ok) {
+      mysql_set_charset('binary', $conn);
+    }
 
     return $conn;
   }
@@ -117,7 +134,8 @@ final class AphrontMySQLDatabaseConnection
     }
 
     if (!$processed_all) {
-      throw new Exception('There are some results left in the result set.');
+      throw new Exception(
+        pht('There are some results left in the result set.'));
     }
 
     return $results;
@@ -138,7 +156,7 @@ final class AphrontMySQLDatabaseConnection
   public function executeParallelQueries(
     array $queries,
     array $conns = array()) {
-    assert_instances_of($conns, 'AphrontMySQLDatabaseConnection');
+    assert_instances_of($conns, __CLASS__);
 
     $map = array();
     $is_write = false;

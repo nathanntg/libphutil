@@ -4,6 +4,7 @@ final class PhutilRemarkupEngine extends PhutilMarkupEngine {
 
   const MODE_DEFAULT = 0;
   const MODE_TEXT = 1;
+  const MODE_HTML_MAIL = 2;
 
   const MAX_CHILD_DEPTH = 32;
 
@@ -13,6 +14,7 @@ final class PhutilRemarkupEngine extends PhutilMarkupEngine {
   private $metadata = array();
   private $states = array();
   private $postprocessRules = array();
+  private $storage;
 
   public function setConfig($key, $value) {
     $this->config[$key] = $value;
@@ -32,8 +34,12 @@ final class PhutilRemarkupEngine extends PhutilMarkupEngine {
     return $this->mode & self::MODE_TEXT;
   }
 
+  public function isHTMLMailMode() {
+    return $this->mode & self::MODE_HTML_MAIL;
+  }
+
   public function setBlockRules(array $rules) {
-    assert_instances_of($rules, 'PhutilRemarkupEngineBlockRule');
+    assert_instances_of($rules, 'PhutilRemarkupBlockRule');
 
     $rules = msort($rules, 'getPriority');
 
@@ -98,7 +104,7 @@ final class PhutilRemarkupEngine extends PhutilMarkupEngine {
 
   public function popState($state) {
     if (empty($this->states[$state])) {
-      throw new Exception("State '{$state}' pushed more than popped!");
+      throw new Exception(pht("State '%s' pushed more than popped!", $state));
     }
     $this->states[$state]--;
     if (!$this->states[$state]) {
@@ -124,7 +130,7 @@ final class PhutilRemarkupEngine extends PhutilMarkupEngine {
     $output = $this->flattenOutput($output);
 
     $map = $this->storage->getMap();
-    unset($this->storage);
+    $this->storage = null;
     $metadata = $this->metadata;
 
 
@@ -178,7 +184,7 @@ final class PhutilRemarkupEngine extends PhutilMarkupEngine {
       }
 
       if ($starting_cursor === $cursor) {
-        throw new Exception('Block in text did not match any block rule.');
+        throw new Exception(pht('Block in text did not match any block rule.'));
       }
     }
 
@@ -239,7 +245,7 @@ final class PhutilRemarkupEngine extends PhutilMarkupEngine {
   private static function shouldMergeBlocks($text, $prev_block, $curr_block) {
     $block_rules = ipull(array($prev_block, $curr_block), 'rule');
 
-    $default_rule = 'PhutilRemarkupEngineRemarkupDefaultBlockRule';
+    $default_rule = 'PhutilRemarkupDefaultBlockRule';
     try {
       assert_instances_of($block_rules, $default_rule);
 
@@ -259,9 +265,7 @@ final class PhutilRemarkupEngine extends PhutilMarkupEngine {
           return true;
         }
       }
-    } catch (Exception $e) {
-
-    }
+    } catch (Exception $e) {}
 
     return false;
   }

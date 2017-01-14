@@ -1,10 +1,10 @@
 #!/usr/bin/env php
 <?php
 
-require_once dirname(dirname(__FILE__)).'/__init_script__.php';
+require_once dirname(__FILE__).'/../__init_script__.php';
 
 $args = new PhutilArgumentParser($argv);
-$args->setTagline('edit directory fixtures');
+$args->setTagline(pht('edit directory fixtures'));
 $args->setSynopsis(<<<EOHELP
 **directory_fixture.php** __file__ --create
   Create a new directory fixture.
@@ -30,7 +30,7 @@ $args->parse(array(
   ),
 ));
 
-$is_create = $args->getArg('create');
+$is_create    = $args->getArg('create');
 $is_read_only = $args->getArg('read-only');
 $console = PhutilConsole::getConsole();
 
@@ -44,15 +44,19 @@ $file = head($files);
 if ($is_create) {
   if (Filesystem::pathExists($file)) {
     throw new PhutilArgumentUsageException(
-      pht('File "%s" already exists, so you can not --create it.', $file));
+      pht(
+        'File "%s" already exists, so you can not %s it.',
+        $file,
+        '--create'));
   }
   $fixture = PhutilDirectoryFixture::newEmptyFixture();
 } else {
   if (!Filesystem::pathExists($file)) {
     throw new PhutilArgumentUsageException(
       pht(
-        'File "%s" does not exist! Use --create to create a new fixture.',
-        $file));
+        'File "%s" does not exist! Use %s to create a new fixture.',
+        $file,
+        '--create'));
   }
   $fixture = PhutilDirectoryFixture::newFromArchive($file);
 }

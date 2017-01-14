@@ -1,8 +1,5 @@
 <?php
 
-/**
- * @group testcase
- */
 final class PhutilLanguageGuesserTestCase extends PhutilTestCase {
 
   public function testGuessing() {
@@ -19,7 +16,7 @@ final class PhutilLanguageGuesserTestCase extends PhutilTestCase {
       $this->assertEqual(
         $expect,
         PhutilLanguageGuesser::guessLanguage($source),
-        "Guessed language for '{$test}'.");
+        pht("Guessed language for '%s'.", $test));
     }
   }
 

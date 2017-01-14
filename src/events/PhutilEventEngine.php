@@ -1,9 +1,6 @@
 <?php
 
-/**
- * @group event
- */
-final class PhutilEventEngine {
+final class PhutilEventEngine extends Phobject {
 
   private static $instance;
 

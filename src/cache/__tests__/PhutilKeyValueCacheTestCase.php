@@ -1,15 +1,15 @@
 <?php
 
-final class PhutilKeyValueCacheTestCase extends ArcanistPhutilTestCase {
+final class PhutilKeyValueCacheTestCase extends PhutilTestCase {
 
   public function testInRequestCache() {
-    $cache = new PhutilKeyValueCacheInRequest();
+    $cache = new PhutilInRequestKeyValueCache();
     $this->doCacheTest($cache);
     $cache->destroyCache();
   }
 
   public function testInRequestCacheLimit() {
-    $cache = new PhutilKeyValueCacheInRequest();
+    $cache = new PhutilInRequestKeyValueCache();
     $cache->setLimit(4);
 
     $cache->setKey(1, 1);
@@ -40,22 +40,22 @@ final class PhutilKeyValueCacheTestCase extends ArcanistPhutilTestCase {
   }
 
   public function testOnDiskCache() {
-    $cache = new PhutilKeyValueCacheOnDisk();
+    $cache = new PhutilOnDiskKeyValueCache();
     $cache->setCacheFile(new TempFile());
     $this->doCacheTest($cache);
     $cache->destroyCache();
   }
 
   public function testAPCCache() {
-    $cache = new PhutilKeyValueCacheAPC();
+    $cache = new PhutilAPCKeyValueCache();
     if (!$cache->isAvailable()) {
-      $this->assertSkipped('Cache not available.');
+      $this->assertSkipped(pht('Cache not available.'));
     }
     $this->doCacheTest($cache);
   }
 
   public function testDirectoryCache() {
-    $cache = new PhutilKeyValueCacheDirectory();
+    $cache = new PhutilDirectoryKeyValueCache();
 
     $dir = Filesystem::createTemporaryDirectory();
     $cache->setCacheDirectory($dir);
@@ -64,7 +64,7 @@ final class PhutilKeyValueCacheTestCase extends ArcanistPhutilTestCase {
   }
 
   public function testDirectoryCacheSpecialDirectoryRules() {
-    $cache = new PhutilKeyValueCacheDirectory();
+    $cache = new PhutilDirectoryKeyValueCache();
 
     $dir = Filesystem::createTemporaryDirectory();
     $dir = $dir.'/dircache/';
@@ -87,7 +87,7 @@ final class PhutilKeyValueCacheTestCase extends ArcanistPhutilTestCase {
 
   public function testNamespaceCache() {
     $namespace = 'namespace'.mt_rand();
-    $in_request_cache = new PhutilKeyValueCacheInRequest();
+    $in_request_cache = new PhutilInRequestKeyValueCache();
     $cache = new PhutilKeyValueCacheNamespace($in_request_cache);
     $cache->setNamespace($namespace);
 
@@ -95,7 +95,8 @@ final class PhutilKeyValueCacheTestCase extends ArcanistPhutilTestCase {
     $keys = array(
       'key1' => mt_rand(),
       'key2' => '',
-      'key3' => 'Phabricator');
+      'key3' => 'Phabricator',
+    );
     $cache->setKeys($keys);
     $cached_keys = $in_request_cache->getAllKeys();
 
@@ -119,10 +120,10 @@ final class PhutilKeyValueCacheTestCase extends ArcanistPhutilTestCase {
   }
 
   public function testCacheStack() {
-    $req_cache = new PhutilKeyValueCacheInRequest();
-    $disk_cache = new PhutilKeyValueCacheOnDisk();
+    $req_cache = new PhutilInRequestKeyValueCache();
+    $disk_cache = new PhutilOnDiskKeyValueCache();
     $disk_cache->setCacheFile(new TempFile());
-    $apc_cache = new PhutilKeyValueCacheAPC();
+    $apc_cache = new PhutilAPCKeyValueCache();
 
     $stack = array(
       $req_cache,

@@ -2,8 +2,6 @@
 
 /**
  * Lexer for shell-like argument strings. Somewhat similar to Python's shlex.
- *
- * @group lexer
  */
 final class PhutilShellLexer extends PhutilLexer {
 
@@ -30,7 +28,7 @@ final class PhutilShellLexer extends PhutilLexer {
     $tokens = $this->getTokens($string);
     if (count($this->getLexerState()) > 1) {
       throw new UnexpectedValueException(
-        'Unterminated string in argument list!');
+        pht('Unterminated string in argument list!'));
     }
 
     foreach ($tokens as $key => $token) {
@@ -84,4 +82,5 @@ final class PhutilShellLexer extends PhutilLexer {
       ),
     );
   }
+
 }

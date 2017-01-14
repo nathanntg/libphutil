@@ -1,19 +1,16 @@
 <?php
 
-/**
- * @group markup
- */
-final class PhutilXHPASTSyntaxHighlighter {
+final class PhutilXHPASTSyntaxHighlighter extends Phobject {
 
   public function getHighlightFuture($source) {
     $scrub = false;
     if (strpos($source, '<?') === false) {
-      $source = "<?php\n".$source."\n";
+      $source = "<?php\n".$source;
       $scrub = true;
     }
 
     return new PhutilXHPASTSyntaxHighlighterFuture(
-      xhpast_get_parser_future($source),
+      PhutilXHPASTBinary::getParserFuture($source),
       $source,
       $scrub);
   }

@@ -6,13 +6,13 @@
  * by page and allows you to implement an iterator over a large result set
  * without needing to hold the entire set in memory.
  *
- * For an example implementation, see @{class:PhutilBufferedIteratorExample}.
+ * For an example implementation, see @{class:PhutilExampleBufferedIterator}.
  *
  * @task impl     Methods to Implement
  * @task config   Configuration
  * @task iterator Iterator Implementation
  */
-abstract class PhutilBufferedIterator implements Iterator {
+abstract class PhutilBufferedIterator extends Phobject implements Iterator {
 
   private $data;
   private $pageSize = 100;
@@ -89,7 +89,7 @@ abstract class PhutilBufferedIterator implements Iterator {
    * @task iterator
    */
   final public function valid() {
-    return (bool)$this->data;
+    return (bool)count($this->data);
   }
 
 

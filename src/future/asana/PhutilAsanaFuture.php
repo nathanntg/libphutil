@@ -1,8 +1,5 @@
 <?php
 
-/**
- * @group asana
- */
 final class PhutilAsanaFuture extends FutureProxy {
 
   private $future;
@@ -36,11 +33,17 @@ final class PhutilAsanaFuture extends FutureProxy {
       $params = $this->params;
 
       if (!$this->action) {
-        throw new Exception('You must setRawAsanaQuery()!');
+        throw new Exception(
+          pht(
+            'You must %s!',
+            'setRawAsanaQuery()'));
       }
 
       if (!$this->accessToken) {
-        throw new Exception('You must setAccessToken()!');
+        throw new Exception(
+          pht(
+            'You must %s!',
+            'setAccessToken()'));
       }
 
       $uri = new PhutilURI('https://app.asana.com/');
@@ -64,14 +67,21 @@ final class PhutilAsanaFuture extends FutureProxy {
       throw $status;
     }
 
-    $data = json_decode($body, true);
-    if (!is_array($data)) {
-      throw new Exception("Expected JSON response from Asana, got: {$body}");
+    $data = null;
+    try {
+      $data = phutil_json_decode($body);
+    } catch (PhutilJSONParserException $ex) {
+      throw new PhutilProxyException(
+        pht('Expected JSON response from Asana.'),
+        $ex);
     }
 
     if (idx($data, 'errors')) {
       $errors = print_r($data['errors'], true);
-      throw new Exception("Received errors from Asana: {$errors}");
+      throw new Exception(
+        pht(
+          'Received errors from Asana: %s',
+          $errors));
     }
 
     return $data['data'];

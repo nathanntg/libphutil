@@ -1,11 +1,10 @@
 #!/usr/bin/env php
 <?php
 
-$root = dirname(dirname(dirname(__FILE__)));
-require_once $root.'/scripts/__init_script__.php';
+require_once dirname(__FILE__).'/../__init_script__.php';
 
 $args = new PhutilArgumentParser($argv);
-$args->setTagline('test context-free grammars');
+$args->setTagline(pht('test context-free grammars'));
 $args->setSynopsis(<<<EOHELP
 **lipsum.php** __class__
     Generate output from a named context-free grammar.
@@ -15,8 +14,8 @@ $args->parseStandardArguments();
 $args->parse(
   array(
     array(
-      'name'      => 'class',
-      'wildcard'  => true,
+      'name'     => 'class',
+      'wildcard' => true,
     ),
   ));
 
@@ -26,17 +25,21 @@ if (count($class) !== 1) {
 }
 $class = reset($class);
 
-$symbols = id(new PhutilSymbolLoader())
+$symbols = id(new PhutilClassMapQuery())
   ->setAncestorClass('PhutilContextFreeGrammar')
-  ->setConcreteOnly(true)
-  ->selectAndLoadSymbols();
+  ->execute();
+
 $symbols = ipull($symbols, 'name', 'name');
 
 if (empty($symbols[$class])) {
   $available = implode(', ', array_keys($symbols));
   throw new PhutilArgumentUsageException(
-    "Class '{$class}' is not a defined, concrete subclass of ".
-    "PhutilContextFreeGrammar. Available classes are: {$available}");
+    pht(
+      "Class '%s' is not a defined, concrete subclass of %s. ".
+      "Available classes are: %s",
+      $class,
+      'PhutilContextFreeGrammar',
+      $available));
 }
 
 $object = newv($class, array());

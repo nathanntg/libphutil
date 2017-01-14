@@ -11,7 +11,7 @@
  *     'c.txt' => new ExecFuture('wc -c c.txt'),
  *   );
  *
- *   foreach (Futures($futures) as $key => $future) {
+ *   foreach (new FutureIterator($futures) as $key => $future) {
  *     // IMPORTANT: keys are preserved but the order of elements is not. This
  *     // construct iterates over the futures in the order they resolve, so the
  *     // fastest future is the one you'll get first. This allows you to start
@@ -27,10 +27,8 @@
  * @task  config    Configuring Iteration
  * @task  iterator  Iterator Interface
  * @task  internal  Internals
- *
- * @group futures
  */
-final class FutureIterator implements Iterator {
+final class FutureIterator extends Phobject implements Iterator {
 
   protected $wait     = array();
   protected $work     = array();
@@ -47,9 +45,7 @@ final class FutureIterator implements Iterator {
 
 
   /**
-   * Create a new iterator over a list of futures. By convention, use the
-   * convenience function @{function:Futures} instead of instantiating this
-   * class directly.
+   * Create a new iterator over a list of futures.
    *
    * @param list  List of @{class:Future}s to resolve.
    * @task basics
@@ -88,7 +84,7 @@ final class FutureIterator implements Iterator {
       $this->futures[$key] = $future;
       $this->wait[] = $key;
     } else {
-      throw new Exception("Invalid key {$key}");
+      throw new Exception(pht('Invalid key %s', $key));
     }
 
     // Start running the future if we don't have $this->limit futures running
@@ -111,7 +107,9 @@ final class FutureIterator implements Iterator {
    * null for key and value. Among other potential uses, you can use this to
    * show some busy indicator:
    *
-   *   foreach (Futures($futures)->setUpdateInterval(1) as $future) {
+   *   $futures = id(new FutureIterator($futures))
+   *     ->setUpdateInterval(1);
+   *   foreach ($futures as $future) {
    *     if ($future === null) {
    *       echo "Still working...\n";
    *     } else {
@@ -137,7 +135,9 @@ final class FutureIterator implements Iterator {
   /**
    * Limit the number of simultaneously executing futures.
    *
-   *  foreach (Futures($futures)->limit(4) as $future) {
+   *  $futures = id(new FutureIterator($futures))
+   *    ->limit(4);
+   *  foreach ($futures as $future) {
    *    // Run no more than 4 futures simultaneously.
    *  }
    *

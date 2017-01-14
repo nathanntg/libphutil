@@ -15,7 +15,7 @@ final class PhagePHPAgentBootloader extends PhageAgentBootloader {
     $len = $this->bootLength;
 
     // We need to run a command which will bootload a full agent by reading
-    // and evaulating source code from stdin. This is the smallest bootstrap
+    // and evaluating source code from stdin. This is the smallest bootstrap
     // I was able to construct:
     //
     //   - Using `fread(STDIN, ...)` is only good up to 8192 bytes.
@@ -47,6 +47,7 @@ final class PhagePHPAgentBootloader extends PhageAgentBootloader {
         'xsprintf/PhutilCommandString.php',
         'future/Future.php',
         'future/FutureIterator.php',
+        'future/exec/PhutilExecutableFuture.php',
         'future/exec/ExecFuture.php',
         'future/exec/CommandException.php',
         'channel/PhutilChannel.php',
@@ -82,7 +83,7 @@ final class PhagePHPAgentBootloader extends PhageAgentBootloader {
       $boot_sequence->addText($main_sequence->toString());
 
       if (strlen($boot_length) > 8192) {
-        throw new Exception('Stage 1 bootloader is too large!');
+        throw new Exception(pht('Stage 1 bootloader is too large!'));
       }
 
       $this->bootSequence = $boot_sequence;

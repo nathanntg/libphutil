@@ -9,8 +9,6 @@
  * @task io       Reading and Writing
  * @task protocol Protocol Implementation
  * @task wait     Waiting for Activity
- *
- * @group channel
  */
 abstract class PhutilProtocolChannel extends PhutilChannelChannel {
 
@@ -135,7 +133,7 @@ abstract class PhutilProtocolChannel extends PhutilChannelChannel {
       self::waitForAny(array($this));
     }
 
-    throw new Exception('Channel closed while waiting for message!');
+    throw new Exception(pht('Channel closed while waiting for message!'));
   }
 
 }

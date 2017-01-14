@@ -34,6 +34,7 @@ final class PhutilConsoleProgressBar extends Phobject {
   private $console;
   private $finished;
   private $lastUpdate;
+  private $quiet = false;
 
   public function setConsole(PhutilConsole $console) {
     $this->console = $console;
@@ -53,6 +54,11 @@ final class PhutilConsoleProgressBar extends Phobject {
     return $this;
   }
 
+  public function setQuiet($quiet) {
+    $this->quiet = $quiet;
+    return $this;
+  }
+
   public function update($work) {
     $this->done += $work;
     $this->redraw();
@@ -62,6 +68,25 @@ final class PhutilConsoleProgressBar extends Phobject {
   private function redraw() {
     if ($this->lastUpdate + 0.1 > microtime(true)) {
       // We redrew the bar very recently; skip this update.
+      return $this;
+    }
+
+    return $this->draw();
+  }
+
+
+  /**
+   * Explicitly redraw the bar.
+   *
+   * Normally, the progress bar is automatically redrawn periodically, but
+   * you may want to force it to draw.
+   *
+   * For example, we force a draw after pre-filling the bar when resuming
+   * large file uploads in `arc upload`. Otherwise, the bar may sit at 0%
+   * until the first chunk completes.
+   */
+  public function draw() {
+    if ($this->quiet) {
       return;
     }
 
@@ -119,6 +144,8 @@ final class PhutilConsoleProgressBar extends Phobject {
 
     $this->eraseLine();
     $console->writeErr('%s', $out);
+
+    return $this;
   }
 
   public function done($clean_exit = true) {
@@ -126,7 +153,7 @@ final class PhutilConsoleProgressBar extends Phobject {
     if ($this->drawn) {
       $this->eraseLine();
       if ($clean_exit) {
-        $console->writeErr("%s\n", 'Done.');
+        $console->writeErr("%s\n", pht('Done.'));
       }
     }
     $this->finished = true;

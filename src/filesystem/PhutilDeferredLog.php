@@ -35,9 +35,8 @@
  * @task log        Logging
  * @task write      Writing the Log
  * @task internal   Internals
- * @group filesystem
  */
-final class PhutilDeferredLog {
+final class PhutilDeferredLog extends Phobject {
 
   private $file;
   private $format;
@@ -123,7 +122,7 @@ final class PhutilDeferredLog {
   public function setFile($file) {
     if ($this->didWrite) {
       throw new Exception(
-        'You can not change the logfile after a write has occurred!');
+        pht('You can not change the logfile after a write has occurred!'));
     }
     $this->file = $file;
     return $this;
@@ -179,13 +178,18 @@ final class PhutilDeferredLog {
     $line = $this->format();
 
     if ($this->file !== null) {
+      $dir = dirname($this->file);
+      if (!Filesystem::pathExists($dir)) {
+        Filesystem::createDirectory($dir, 0755, true);
+      }
+
       $ok = @file_put_contents(
         $this->file,
         $line,
         FILE_APPEND | LOCK_EX);
 
       if ($ok === false) {
-        $message = "Unable to write to logfile '{$this->file}'!";
+        $message = pht("Unable to write to logfile '%s'!", $this->file);
         if ($this->failQuietly) {
           phlog($message);
         } else {

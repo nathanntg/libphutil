@@ -2,8 +2,6 @@
 
 /**
  * Test cases for @{class:PhutilRemarkupEngine}.
- *
- * @group testcase
  */
 final class PhutilRemarkupEngineTestCase extends PhutilTestCase {
 
@@ -28,7 +26,7 @@ final class PhutilRemarkupEngineTestCase extends PhutilTestCase {
     switch ($file) {
       case 'raw-escape.txt':
 
-        // NOTE: Here, we want to test PhutilRemarkupRuleEscapeRemarkup and
+        // NOTE: Here, we want to test PhutilRemarkupEscapeRemarkupRule and
         // PhutilRemarkupBlockStorage, which are triggered by "\1". In the
         // test, "~" is used as a placeholder for "\1" since it's hard to type
         // "\1".
@@ -40,6 +38,13 @@ final class PhutilRemarkupEngineTestCase extends PhutilTestCase {
       case 'toc.txt':
         $engine->setConfig('header.generate-toc', true);
         break;
+      case 'link-same-window.txt':
+        $engine->setConfig('uri.same-window', true);
+        break;
+      case 'link-square.txt':
+        $engine->setConfig('uri.base', 'http://www.example.com/');
+        $engine->setConfig('uri.here', 'http://www.example.com/page/');
+        break;
     }
 
     $actual_output = (string)$engine->markupText($input_remarkup);
@@ -47,8 +52,7 @@ final class PhutilRemarkupEngineTestCase extends PhutilTestCase {
     switch ($file) {
       case 'toc.txt':
         $table_of_contents =
-          PhutilRemarkupEngineRemarkupHeaderBlockRule::renderTableOfContents(
-            $engine);
+          PhutilRemarkupHeaderBlockRule::renderTableOfContents($engine);
         $actual_output = $table_of_contents."\n\n".$actual_output;
         break;
     }
@@ -56,7 +60,7 @@ final class PhutilRemarkupEngineTestCase extends PhutilTestCase {
     $this->assertEqual(
       $expected_output,
       $actual_output,
-      "Failed to markup HTML in file '{$file}'.");
+      pht("Failed to markup HTML in file '%s'.", $file));
 
     $engine->setMode(PhutilRemarkupEngine::MODE_TEXT);
     $actual_output = (string)$engine->markupText($input_remarkup);
@@ -64,46 +68,47 @@ final class PhutilRemarkupEngineTestCase extends PhutilTestCase {
     $this->assertEqual(
       $expected_text,
       $actual_output,
-      "Failed to markup text in file '{$file}'.");
+      pht("Failed to markup text in file '%s'.", $file));
   }
 
   private function buildNewTestEngine() {
     $engine = new PhutilRemarkupEngine();
-    $engine->setConfig('uri.prefix', 'http://www.example.com/');
 
     $engine->setConfig(
       'uri.allowed-protocols',
       array(
         'http' => true,
         'mailto' => true,
+        'tel' => true,
       ));
 
     $rules = array();
-    $rules[] = new PhutilRemarkupRuleEscapeRemarkup();
-    $rules[] = new PhutilRemarkupRuleMonospace();
-    $rules[] = new PhutilRemarkupRuleDocumentLink();
-    $rules[] = new PhutilRemarkupRuleHyperlink();
-    $rules[] = new PhutilRemarkupRuleBold();
-    $rules[] = new PhutilRemarkupRuleItalic();
-    $rules[] = new PhutilRemarkupRuleDel();
-    $rules[] = new PhutilRemarkupRuleUnderline();
+    $rules[] = new PhutilRemarkupEscapeRemarkupRule();
+    $rules[] = new PhutilRemarkupMonospaceRule();
+    $rules[] = new PhutilRemarkupDocumentLinkRule();
+    $rules[] = new PhutilRemarkupHyperlinkRule();
+    $rules[] = new PhutilRemarkupBoldRule();
+    $rules[] = new PhutilRemarkupItalicRule();
+    $rules[] = new PhutilRemarkupDelRule();
+    $rules[] = new PhutilRemarkupUnderlineRule();
+    $rules[] = new PhutilRemarkupHighlightRule();
 
     $blocks = array();
-    $blocks[] = new PhutilRemarkupEngineRemarkupQuotesBlockRule();
-    $blocks[] = new PhutilRemarkupEngineRemarkupReplyBlockRule();
-    $blocks[] = new PhutilRemarkupEngineRemarkupHeaderBlockRule();
-    $blocks[] = new PhutilRemarkupEngineRemarkupHorizontalRuleBlockRule();
-    $blocks[] = new PhutilRemarkupEngineRemarkupCodeBlockRule();
-    $blocks[] = new PhutilRemarkupEngineRemarkupLiteralBlockRule();
-    $blocks[] = new PhutilRemarkupEngineRemarkupNoteBlockRule();
-    $blocks[] = new PhutilRemarkupEngineRemarkupTableBlockRule();
-    $blocks[] = new PhutilRemarkupEngineRemarkupSimpleTableBlockRule();
-    $blocks[] = new PhutilRemarkupEngineRemarkupDefaultBlockRule();
-    $blocks[] = new PhutilRemarkupEngineRemarkupListBlockRule();
-    $blocks[] = new PhutilRemarkupEngineRemarkupInterpreterRule();
+    $blocks[] = new PhutilRemarkupQuotesBlockRule();
+    $blocks[] = new PhutilRemarkupReplyBlockRule();
+    $blocks[] = new PhutilRemarkupHeaderBlockRule();
+    $blocks[] = new PhutilRemarkupHorizontalRuleBlockRule();
+    $blocks[] = new PhutilRemarkupCodeBlockRule();
+    $blocks[] = new PhutilRemarkupLiteralBlockRule();
+    $blocks[] = new PhutilRemarkupNoteBlockRule();
+    $blocks[] = new PhutilRemarkupTableBlockRule();
+    $blocks[] = new PhutilRemarkupSimpleTableBlockRule();
+    $blocks[] = new PhutilRemarkupDefaultBlockRule();
+    $blocks[] = new PhutilRemarkupListBlockRule();
+    $blocks[] = new PhutilRemarkupInterpreterBlockRule();
 
     foreach ($blocks as $block) {
-      if (!($block instanceof PhutilRemarkupEngineRemarkupCodeBlockRule)) {
+      if (!($block instanceof PhutilRemarkupCodeBlockRule)) {
         $block->setMarkupRules($rules);
       }
     }

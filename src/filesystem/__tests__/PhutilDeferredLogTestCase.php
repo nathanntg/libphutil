@@ -1,8 +1,5 @@
 <?php
 
-/**
- * @group testcase
- */
 final class PhutilDeferredLogTestCase extends PhutilTestCase {
 
   public function testLogging() {
@@ -78,7 +75,6 @@ final class PhutilDeferredLogTestCase extends PhutilTestCase {
         'a' => 'a',
         'b' => 'b',
       ));
-
   }
 
   public function testLogWriteFailure() {
@@ -112,7 +108,8 @@ final class PhutilDeferredLogTestCase extends PhutilTestCase {
       $futures[] = new ExecFuture('%s %d %s', $bin, $n_lines, (string)$tmp);
     }
 
-    Futures($futures)->resolveAll();
+    id(new FutureIterator($futures))
+      ->resolveAll();
 
     $this->assertEqual(
       str_repeat("abcdefghijklmnopqrstuvwxyz\n", $n_writers * $n_lines),
@@ -126,7 +123,7 @@ final class PhutilDeferredLogTestCase extends PhutilTestCase {
     $log->setFile(null);
     unset($log);
 
-    $this->assertEqual('', Filesystem::readFile($tmp), 'No Write');
+    $this->assertEqual('', Filesystem::readFile($tmp), pht('No Write'));
   }
 
   public function testDoubleWrite() {
@@ -137,7 +134,9 @@ final class PhutilDeferredLogTestCase extends PhutilTestCase {
     $log->write();
     unset($log);
 
-    $this->assertEqual("xyz\n", Filesystem::readFile($tmp), 'Double Write');
+    $this->assertEqual(
+      "xyz\n",
+      Filesystem::readFile($tmp), pht('Double Write'));
   }
 
   public function testSetAfterWrite() {
@@ -154,7 +153,7 @@ final class PhutilDeferredLogTestCase extends PhutilTestCase {
       $caught = $ex;
     }
 
-    $this->assertTrue($caught instanceof Exception, 'Set After Write');
+    $this->assertTrue($caught instanceof Exception, pht('Set After Write'));
   }
 
   private function checkLog($expect, $format, $data) {

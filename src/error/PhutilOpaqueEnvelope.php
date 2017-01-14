@@ -20,7 +20,7 @@
  * @task envelope Using Opaque Envelopes
  * @task internal Internals
  */
-final class PhutilOpaqueEnvelope {
+final class PhutilOpaqueEnvelope extends Phobject {
 
   private $value;
 
@@ -48,7 +48,7 @@ final class PhutilOpaqueEnvelope {
    * @task envelope
    */
   public function __toString() {
-    return '<opaque envelope>';
+    return pht('<opaque envelope>');
   }
 
 

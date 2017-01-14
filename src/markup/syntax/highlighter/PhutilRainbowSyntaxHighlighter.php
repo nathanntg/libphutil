@@ -3,10 +3,8 @@
 /**
  * Highlights source code with a rainbow of colors, regardless of the language.
  * This highlighter is useless, absurd, and extremely slow.
- *
- * @group markup
  */
-final class PhutilRainbowSyntaxHighlighter {
+final class PhutilRainbowSyntaxHighlighter extends Phobject {
 
   private $config = array();
 
@@ -44,4 +42,5 @@ final class PhutilRainbowSyntaxHighlighter {
     $result = phutil_implode_html('', $result);
     return new ImmediateFuture($result);
   }
+
 }

@@ -3,10 +3,8 @@
 /**
  * Parse a docblock comment from source code into raw text documentation and
  * metadata (like "@author" and "@return").
- *
- * @group parser
  */
-final class PhutilDocblockParser {
+final class PhutilDocblockParser extends Phobject {
 
   public function extractDocblocks($text) {
     $blocks = array();
@@ -43,7 +41,6 @@ final class PhutilDocblockParser {
   }
 
   public function parse($docblock) {
-
     // Strip off comments.
     $docblock = trim($docblock);
     $docblock = preg_replace('@^/\*\*@', '', $docblock);
@@ -100,19 +97,39 @@ final class PhutilDocblockParser {
       foreach ($matches as $match) {
         list($_, $type, $data) = $match;
         $data = trim($data);
-        if (isset($special[$type])) {
-          $special[$type] = $special[$type]."\n".$data;
-        } else {
+
+        // For flags like "@stable" which don't have any string data, set the
+        // value to true.
+        if (!strlen($data)) {
+          $data = true;
+        }
+
+        if (!isset($special[$type])) {
           $special[$type] = $data;
+        } else {
+          if (!is_array($special[$type])) {
+            $special[$type] = (array)$special[$type];
+          }
+          $special[$type][] = $data;
         }
       }
     }
 
-    // For flags like "@stable" which don't have any string data, set the value
-    // to true.
+    // Convert `array(true, true, true)` to `true`.
     foreach ($special as $type => $data) {
-      if (!strlen(trim($data))) {
-        $special[$type] = true;
+      if (is_array($data)) {
+        $all_trues = true;
+
+        foreach ($data as $value) {
+          if ($value !== true) {
+            $all_trues = false;
+            break;
+          }
+        }
+
+        if ($all_trues) {
+          $special[$type] = true;
+        }
       }
     }
 
@@ -142,4 +159,5 @@ final class PhutilDocblockParser {
 
     return array($docblock, $special);
   }
+
 }

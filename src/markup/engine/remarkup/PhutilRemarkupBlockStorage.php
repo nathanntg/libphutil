@@ -29,10 +29,8 @@
  * security risks.
  *
  * This class generates keys, and stores the map of keys to replacement text.
- *
- * @group markup
  */
-final class PhutilRemarkupBlockStorage {
+final class PhutilRemarkupBlockStorage extends Phobject {
 
   const MAGIC_BYTE = "\1";
 

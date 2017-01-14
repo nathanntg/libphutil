@@ -1,38 +1,43 @@
 <?php
 
 /**
- * Query and load Phutil classes, interfaces and functions. PhutilSymbolLoader
- * is a query object which selects symbols which satisfy certain criteria, and
- * optionally loads them. For instance, to load all classes in a library:
+ * Query and load Phutil classes, interfaces and functions.
  *
- *    $symbols = id(new PhutilSymbolLoader())
- *      ->setType('class')
- *      ->setLibrary('example')
- *      ->selectAndLoadSymbols();
+ * `PhutilSymbolLoader` is a query object which selects symbols which satisfy
+ * certain criteria, and optionally loads them. For instance, to load all
+ * classes in a library:
+ *
+ * ```lang=php
+ * $symbols = id(new PhutilSymbolLoader())
+ *   ->setType('class')
+ *   ->setLibrary('example')
+ *   ->selectAndLoadSymbols();
+ * ```
  *
  * When you execute the loading query, it returns a dictionary of matching
  * symbols:
  *
- *    array(
- *      'class$Example' => array(
- *        'type'    => 'class',
- *        'name'    => 'Example',
- *        'library' => 'libexample',
- *        'where'   => 'examples/example.php',
- *      ),
- *      // ... more ...
- *    );
+ * ```lang=php
+ * array(
+ *   'class$Example' => array(
+ *     'type'    => 'class',
+ *     'name'    => 'Example',
+ *     'library' => 'libexample',
+ *     'where'   => 'examples/example.php',
+ *   ),
+ *   // ... more ...
+ * );
+ * ```
  *
  * The **library** and **where** keys show where the symbol is defined. The
  * **type** and **name** keys identify the symbol itself.
  *
- * NOTE: This class must not use libphutil funtions, including id() and idx().
+ * NOTE: This class must not use libphutil functions, including @{function:id}
+ * and @{function:idx}.
  *
  * @task config   Configuring the Query
  * @task load     Loading Symbols
  * @task internal Internals
- *
- * @group library
  */
 final class PhutilSymbolLoader {
 
@@ -47,10 +52,12 @@ final class PhutilSymbolLoader {
 
 
   /**
-   * Select the type of symbol to load, either ##class## or ##function##.
+   * Select the type of symbol to load, either `class`, `function` or
+   * `interface`.
    *
    * @param string  Type of symbol to load.
    * @return this
+   *
    * @task config
    */
   public function setType($type) {
@@ -65,6 +72,7 @@ final class PhutilSymbolLoader {
    *
    * @param string Library name.
    * @return this
+   *
    * @task config
    */
   public function setLibrary($library) {
@@ -83,6 +91,7 @@ final class PhutilSymbolLoader {
    *
    * @param string Path relative to library root, like "apps/cheese/".
    * @return this
+   *
    * @task config
    */
   public function setPathPrefix($path) {
@@ -97,6 +106,7 @@ final class PhutilSymbolLoader {
    *
    * @param string Symbol name.
    * @return this
+   *
    * @task config
    */
   public function setName($name) {
@@ -112,6 +122,7 @@ final class PhutilSymbolLoader {
    *
    * @param string Base class name.
    * @return this
+   *
    * @task config
    */
   public function setAncestorClass($base) {
@@ -129,6 +140,7 @@ final class PhutilSymbolLoader {
    *
    * @param bool True if the query should load only concrete symbols.
    * @return this
+   *
    * @task config
    */
   public function setConcreteOnly($concrete) {
@@ -147,6 +159,7 @@ final class PhutilSymbolLoader {
    * @return dict A dictionary of matching symbols. See top-level class
    *              documentation for details. These symbols will be loaded
    *              and available.
+   *
    * @task load
    */
   public function selectAndLoadSymbols() {
@@ -189,11 +202,10 @@ final class PhutilSymbolLoader {
         // As an optimization, we filter the list of candidate symbols in
         // several passes, applying a name-based filter first if possible since
         // it is highly selective and guaranteed to match at most one symbol.
-        // This is the common case and we land here through __autoload() so it's
-        // worthwhile to microoptimize a bit because this code path is very hot
-        // and we save 5-10ms per page for a very moderate increase in
+        // This is the common case and we land here through `__autoload()` so
+        // it's worthwhile to micro-optimize a bit because this code path is
+        // very hot and we save 5-10ms per page for a very moderate increase in
         // complexity.
-
 
         if ($this->name) {
           // If we have a name filter, just pick the matching name out if it
@@ -275,10 +287,11 @@ final class PhutilSymbolLoader {
    * Execute the query and select matching symbols, but do not load them. This
    * will perform slightly better if you are only interested in the existence
    * of the symbols and don't plan to use them; otherwise, use
-   * ##selectAndLoadSymbols()##.
+   * @{method:selectAndLoadSymbols}.
    *
    * @return dict A dictionary of matching symbols. See top-level class
    *              documentation for details.
+   *
    * @task load
    */
   public function selectSymbolsWithoutLoading() {
@@ -347,7 +360,6 @@ final class PhutilSymbolLoader {
    * @task internal
    */
   private function loadSymbol(array $symbol_spec) {
-
     // Check if we've already loaded the symbol; bail if we have.
     $name = $symbol_spec['name'];
     $is_function = ($symbol_spec['type'] == 'function');
@@ -374,11 +386,11 @@ final class PhutilSymbolLoader {
     $load_failed = null;
     if ($is_function) {
       if (!function_exists($name)) {
-        $load_failed = 'function';
+        $load_failed = pht('function');
       }
     } else {
       if (!class_exists($name, false) && !interface_exists($name, false)) {
-        $load_failed = 'class or interface';
+        $load_failed = pht('class or interface');
       }
     }
 
@@ -387,9 +399,15 @@ final class PhutilSymbolLoader {
       throw new PhutilMissingSymbolException(
         $name,
         $load_failed,
-        "the symbol map for library '{$lib_name}' (at '{$lib_path}') claims ".
-        "this {$load_failed} is defined in '{$where}', but loading that ".
-        "source file did not cause the {$load_failed} to become defined.");
+        pht(
+          "the symbol map for library '%s' (at '%s') claims this %s is ".
+          "defined in '%s', but loading that source file did not cause the ".
+          "%s to become defined.",
+          $lib_name,
+          $lib_path,
+          $load_failed,
+          $where,
+          $load_failed));
     }
   }
 

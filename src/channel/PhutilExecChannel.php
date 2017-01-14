@@ -30,7 +30,7 @@
  * a server but performs I/O on stdin/stdout, and you need to act like a client
  * or interact with the program at the same time as you manage traditional
  * socket connections. Examples are Mercurial operating in "cmdserve" mode, git
- * operating in "receive-pack" mode, etc. It is unlikely that any reasonble
+ * operating in "receive-pack" mode, etc. It is unlikely that any reasonable
  * use of this class is concise enough to make a short example out of, so you
  * get a contrived one instead.
  *
@@ -41,8 +41,6 @@
  * the implementation of this class is fairly straightforward.
  *
  * @task construct Construction
- *
- * @group channel
  */
 final class PhutilExecChannel extends PhutilChannel {
 
@@ -99,7 +97,7 @@ final class PhutilExecChannel extends PhutilChannel {
         call_user_func($this->stderrHandler, $this, $stderr);
       } else {
         throw new Exception(
-          "Unexpected output to stderr on exec channel: {$stderr}");
+          pht('Unexpected output to stderr on exec channel: %s', $stderr));
       }
     }
 
@@ -115,7 +113,7 @@ final class PhutilExecChannel extends PhutilChannel {
   }
 
   protected function writeBytes($bytes) {
-    throw new Exception('ExecFuture can not write bytes directly!');
+    throw new Exception(pht('%s can not write bytes directly!', 'ExecFuture'));
   }
 
   protected function getReadSockets() {

@@ -18,6 +18,10 @@ final class PhutilTypeSpecTestCase extends PhutilTestCase {
       'optional int? (minimum 300)',
       'list<wild>',
       'list<list<list<map<string, string>>>> (easy)',
+      '\\SomeClass',
+      '\\Namespace\\SomeClass',
+      '\\NamespaceA\\NamespaceB\\NamespaceC',
+      'NamespaceA\\NamespaceB\\NamespaceC',
     );
 
     $bad = array(
@@ -29,6 +33,10 @@ final class PhutilTypeSpecTestCase extends PhutilTestCase {
       '(derp)',
       'list<string (capital letters), string>',
       'int?|string',
+      '\\',
+      '\\\\',
+      '\\SomeClass\\',
+      'SomeClass\\',
     );
 
     $good = array_fill_keys($good, true);
@@ -104,7 +112,7 @@ final class PhutilTypeSpecTestCase extends PhutilTestCase {
 
     foreach ($map as $expect => $tests) {
       if (is_int($expect)) {
-        $expect = (bool) $expect;
+        $expect = (bool)$expect;
       }
 
       foreach ($tests as $input) {
@@ -132,9 +140,10 @@ final class PhutilTypeSpecTestCase extends PhutilTestCase {
       'map<int, list<string>>'  => array(1 => array('x', 'y')),
       'stdClass'                => new stdClass(),
       'list<Exception>'         => array(
-                                     new Exception(),
-                                     new LogicException(),
-                                     new RuntimeException()),
+        new Exception(),
+        new LogicException(),
+        new RuntimeException(),
+      ),
       'map<string, stdClass>'   => array('x' => new stdClass()),
     );
 
@@ -169,7 +178,7 @@ final class PhutilTypeSpecTestCase extends PhutilTestCase {
         $caught = $ex;
       }
 
-      $this->assertTrue($ex instanceof PhutilTypeCheckException);
+      $this->assertTrue($caught instanceof PhutilTypeCheckException);
     }
   }
 
@@ -207,7 +216,7 @@ final class PhutilTypeSpecTestCase extends PhutilTestCase {
       $caught = $ex;
     }
 
-    $this->assertTrue($ex instanceof PhutilTypeMissingParametersException);
+    $this->assertTrue($caught instanceof PhutilTypeMissingParametersException);
 
     // Parameter "size" is specified but does not exist.
 
@@ -223,7 +232,7 @@ final class PhutilTypeSpecTestCase extends PhutilTestCase {
       $caught = $ex;
     }
 
-    $this->assertTrue($ex instanceof PhutilTypeExtraParametersException);
+    $this->assertTrue($caught instanceof PhutilTypeExtraParametersException);
   }
 
   public function testRegexValidation() {
@@ -248,7 +257,7 @@ final class PhutilTypeSpecTestCase extends PhutilTestCase {
       $caught = $ex;
     }
 
-    $this->assertTrue($ex instanceof PhutilTypeCheckException);
+    $this->assertTrue($caught instanceof PhutilTypeCheckException);
   }
 
   public function testScalarOrListRegexp() {
@@ -285,6 +294,27 @@ final class PhutilTypeSpecTestCase extends PhutilTestCase {
       ));
 
     $this->assertTrue(true);
+  }
+
+  public function testMixedVector() {
+    // This is a test case for an issue where we would not infer the type
+    // of a vector containing a mixture of scalar and nonscalar elements
+    // correctly.
+
+    $caught = null;
+    try {
+      PhutilTypeSpec::checkMap(
+        array(
+          'key' => array('!', (object)array()),
+        ),
+        array(
+          'key' => 'list<X>',
+        ));
+    } catch (PhutilTypeCheckException $ex) {
+      $caught = $ex;
+    }
+
+    $this->assertTrue($caught instanceof PhutilTypeCheckException);
   }
 
 }

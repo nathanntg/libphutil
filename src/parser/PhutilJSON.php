@@ -6,7 +6,7 @@
  * @task pretty Formatting JSON Objects
  * @task internal Internals
  */
-final class PhutilJSON {
+final class PhutilJSON extends Phobject {
 
 
 /* -(  Formatting JSON Objects  )-------------------------------------------- */
@@ -21,6 +21,17 @@ final class PhutilJSON {
    */
   public function encodeFormatted(array $object) {
     return $this->encodeFormattedObject($object, 0)."\n";
+  }
+
+
+  /**
+   * Encode a list in JSON and pretty-print it, discarding keys.
+   *
+   * @param list<wild> List to encode in JSON.
+   * @return string Pretty-printed list representation.
+   */
+  public function encodeAsList(array $list) {
+    return $this->encodeFormattedArray($list, 0)."\n";
   }
 
 
@@ -53,7 +64,7 @@ final class PhutilJSON {
     }
     $key_lines = array();
     foreach ($keys as $k => $key) {
-      $key_lines[] = $key_pre.str_pad($key, $max).' : '.$vals[$k];
+      $key_lines[] = $key_pre.$key.': '.$vals[$k];
     }
     $key_lines = implode(",\n", $key_lines);
 
@@ -113,7 +124,15 @@ final class PhutilJSON {
         return $this->encodeFormattedObject($value, $depth);
       }
     } else {
-      return json_encode($value);
+      if (defined('JSON_UNESCAPED_SLASHES')) {
+        // If we have a new enough version of PHP, disable escaping of slashes
+        // when pretty-printing values. Escaping slashes can defuse an attack
+        // where the attacker embeds "</script>" inside a JSON string, but that
+        // isn't relevant when rendering JSON for human viewers.
+        return json_encode($value, JSON_UNESCAPED_SLASHES);
+      } else {
+        return json_encode($value);
+      }
     }
   }
 

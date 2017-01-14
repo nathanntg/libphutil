@@ -1,22 +1,20 @@
 <?php
 
-/**
- * @group testcase
- */
-final class PhutilPersonTest implements PhutilPerson {
-  private $sex = PhutilPerson::SEX_UNKNOWN;
+final class PhutilPersonTest extends Phobject implements PhutilPerson {
 
-  public function getSex() {
-    return $this->sex;
+  private $gender = PhutilPerson::GENDER_UNKNOWN;
+
+  public function getGender() {
+    return $this->gender;
   }
 
-  public function setSex($value) {
-    $this->sex = $value;
+  public function setGender($value) {
+    $this->gender = $value;
     return $this;
   }
 
   public function __toString() {
-    return 'Test ('.$this->sex.')';
+    return pht('Test (%s)', $this->gender);
   }
 
 }

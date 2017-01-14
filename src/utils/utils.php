@@ -30,7 +30,7 @@ function id($x) {
  * @param   scalar  Index to access in the array.
  * @param   wild    Default value to return if the key is not present in the
  *                  array.
- * @return  wild    If $array[$key] exists, that value is returned. If not,
+ * @return  wild    If `$array[$key]` exists, that value is returned. If not,
  *                  $default is returned without raising a warning.
  */
 function idx(array $array, $key, $default = null) {
@@ -45,6 +45,39 @@ function idx(array $array, $key, $default = null) {
   }
 
   return $default;
+}
+
+
+/**
+ * Access a sequence of array indexes, retrieving a deeply nested value if
+ * it exists or a default if it does not.
+ *
+ * For example, `idxv($dict, array('a', 'b', 'c'))` accesses the key at
+ * `$dict['a']['b']['c']`, if it exists. If it does not, or any intermediate
+ * value is not itself an array, it returns the defualt value.
+ *
+ * @param array Array to access.
+ * @param list<string> List of keys to access, in sequence.
+ * @param wild Default value to return.
+ * @return wild Accessed value, or default if the value is not accessible.
+ */
+function idxv(array $map, array $path, $default = null) {
+  if (!$path) {
+    return $default;
+  }
+
+  $last = last($path);
+  $path = array_slice($path, 0, -1);
+
+  $cursor = $map;
+  foreach ($path as $key) {
+    $cursor = idx($cursor, $key);
+    if (!is_array($cursor)) {
+      return $default;
+    }
+  }
+
+  return idx($cursor, $last, $default);
 }
 
 
@@ -100,9 +133,9 @@ function idx(array $array, $key, $default = null) {
  * @param   string|null   Determines how **keys** will be assigned in the result
  *                        array. Use a string like 'getID' to use the result
  *                        of calling the named method as each object's key, or
- *                        ##null## to preserve the original keys.
+ *                        `null` to preserve the original keys.
  * @return  dict          A dictionary with keys and values derived according
- *                        to whatever you passed as $method and $key_method.
+ *                        to whatever you passed as `$method` and `$key_method`.
  */
 function mpull(array $list, $method, $key_method = null) {
   $result = array();
@@ -169,13 +202,14 @@ function mpull(array $list, $method, $key_method = null) {
  * @param   string|null   Determines which **values** will appear in the result
  *                        array. Use a string like 'name' to store the value of
  *                        accessing the named property in each value, or
- *                        ##null## to preserve the original objects.
+ *                        `null` to preserve the original objects.
  * @param   string|null   Determines how **keys** will be assigned in the result
  *                        array. Use a string like 'id' to use the result of
  *                        accessing the named property as each object's key, or
- *                        ##null## to preserve the original keys.
+ *                        `null` to preserve the original keys.
  * @return  dict          A dictionary with keys and values derived according
- *                        to whatever you passed as $property and $key_property.
+ *                        to whatever you passed as `$property` and
+ *                        `$key_property`.
  */
 function ppull(array $list, $property, $key_property = null) {
   $result = array();
@@ -223,7 +257,7 @@ function ppull(array $list, $property, $key_property = null) {
  *                        array. Use a scalar to select that index from each
  *                        array, or null to preserve the array keys.
  * @return  dict          A dictionary with keys and values derived according
- *                        to whatever you passed for $index and $key_index.
+ *                        to whatever you passed for `$index` and `$key_index`.
  */
 function ipull(array $list, $index, $key_index = null) {
   $result = array();
@@ -341,13 +375,13 @@ function igroup(array $list, $by /* , ... */) {
 
 /**
  * Sort a list of objects by the return value of some method. In PHP, this is
- * often vastly more efficient than ##usort()## and similar.
+ * often vastly more efficient than `usort()` and similar.
  *
  *    // Sort a list of Duck objects by name.
  *    $sorted = msort($ducks, 'getName');
  *
  * It is usually significantly more efficient to define an ordering method
- * on objects and call ##msort()## than to write a comparator. It is often more
+ * on objects and call `msort()` than to write a comparator. It is often more
  * convenient, as well.
  *
  * NOTE: This method does not take the list by reference; it returns a new list.
@@ -361,6 +395,50 @@ function msort(array $list, $method) {
   $surrogate = mpull($list, $method);
 
   asort($surrogate);
+
+  $result = array();
+  foreach ($surrogate as $key => $value) {
+    $result[$key] = $list[$key];
+  }
+
+  return $result;
+}
+
+
+/**
+ * Sort a list of objects by a sort vector.
+ *
+ * This sort is stable, well-behaved, and more efficient than `usort()`.
+ *
+ * @param list List of objects to sort.
+ * @param string Name of a method to call on each object. The method must
+ *   return a @{class:PhutilSortVector}.
+ * @return list Objects ordered by the vectors.
+ */
+function msortv(array $list, $method) {
+  $surrogate = mpull($list, $method);
+
+  $index = 0;
+  foreach ($surrogate as $key => $value) {
+    if (!($value instanceof PhutilSortVector)) {
+      throw new Exception(
+        pht(
+          'Objects passed to "%s" must return sort vectors (objects of '.
+          'class "%s") from the specified method ("%s"). One object (with '.
+          'key "%s") did not.',
+          'msortv()',
+          'PhutilSortVector',
+          $method,
+          $key));
+    }
+
+    // Add the original index to keep the sort stable.
+    $value->addInt($index++);
+
+    $surrogate[$key] = (string)$value;
+  }
+
+  asort($surrogate, SORT_STRING);
 
   $result = array();
   foreach ($surrogate as $key => $value) {
@@ -397,7 +475,7 @@ function isort(array $list, $index) {
 
 /**
  * Filter a list of objects by executing a method across all the objects and
- * filter out the ones wth empty() results. this function works just like
+ * filter out the ones with empty() results. this function works just like
  * @{function:ifilter}, except that it operates on a list of objects instead
  * of a list of arrays.
  *
@@ -415,12 +493,11 @@ function isort(array $list, $index) {
  * @param  string       A method name.
  * @param  bool         Optionally, pass true to drop objects which pass the
  *                      filter instead of keeping them.
- *
- * @return array   List of objects which pass the filter.
+ * @return array        List of objects which pass the filter.
  */
 function mfilter(array $list, $method, $negate = false) {
   if (!is_string($method)) {
-    throw new InvalidArgumentException('Argument method is not a string.');
+    throw new InvalidArgumentException(pht('Argument method is not a string.'));
   }
 
   $result = array();
@@ -461,12 +538,11 @@ function mfilter(array $list, $method, $negate = false) {
  * @param  scalar       The index.
  * @param  bool         Optionally, pass true to drop arrays which pass the
  *                      filter instead of keeping them.
- *
- * @return array   List of arrays which pass the filter.
+ * @return array        List of arrays which pass the filter.
  */
 function ifilter(array $list, $index, $negate = false) {
   if (!is_scalar($index)) {
-    throw new InvalidArgumentException('Argument index is not a scalar.');
+    throw new InvalidArgumentException(pht('Argument index is not a scalar.'));
   }
 
   $result = array();
@@ -515,8 +591,8 @@ function array_select_keys(array $dict, array $keys) {
 
 
 /**
- * Checks if all values of array are instances of the passed class.
- * Throws InvalidArgumentException if it isn't true for any value.
+ * Checks if all values of array are instances of the passed class. Throws
+ * `InvalidArgumentException` if it isn't true for any value.
  *
  * @param  array
  * @param  string  Name of the class or 'array' to check arrays.
@@ -530,18 +606,23 @@ function assert_instances_of(array $arr, $class) {
       if (!is_array($object)) {
         $given = gettype($object);
         throw new InvalidArgumentException(
-          "Array item with key '{$key}' must be of type array, ".
-          "{$given} given.");
+          pht(
+            "Array item with key '%s' must be of type array, %s given.",
+            $key,
+            $given));
       }
 
     } else if (!($object instanceof $class)) {
       $given = gettype($object);
       if (is_object($object)) {
-        $given = 'instance of '.get_class($object);
+        $given = pht('instance of %s', get_class($object));
       }
       throw new InvalidArgumentException(
-        "Array item with key '{$key}' must be an instance of {$class}, ".
-        "{$given} given.");
+        pht(
+          "Array item with key '%s' must be an instance of %s, %s given.",
+          $key,
+          $class,
+          $given));
     }
   }
 
@@ -577,15 +658,17 @@ function assert_stringlike($parameter) {
   }
 
   throw new InvalidArgumentException(
-    'Argument must be scalar or object which implements __toString()!');
+    pht(
+      'Argument must be scalar or object which implements %s!',
+      '__toString()'));
 }
 
 /**
- * Returns the first argument which is not strictly null, or ##null## if there
+ * Returns the first argument which is not strictly null, or `null` if there
  * are no such arguments. Identical to the MySQL function of the same name.
  *
  * @param  ...         Zero or more arguments of any type.
- * @return mixed       First non-##null## arg, or null if no such arg exists.
+ * @return mixed       First non-`null` arg, or null if no such arg exists.
  */
 function coalesce(/* ... */) {
   $args = func_get_args();
@@ -600,14 +683,14 @@ function coalesce(/* ... */) {
 
 /**
  * Similar to @{function:coalesce}, but less strict: returns the first
- * non-##empty()## argument, instead of the first argument that is strictly
- * non-##null##. If no argument is nonempty, it returns the last argument. This
+ * non-`empty()` argument, instead of the first argument that is strictly
+ * non-`null`. If no argument is nonempty, it returns the last argument. This
  * is useful idiomatically for setting defaults:
  *
  *   $display_name = nonempty($user_name, $full_name, "Anonymous");
  *
  * @param  ...         Zero or more arguments of any type.
- * @return mixed       First non-##empty()## arg, or last arg if no such arg
+ * @return mixed       First non-`empty()` arg, or last arg if no such arg
  *                     exists, or null if you passed in zero args.
  */
 function nonempty(/* ... */) {
@@ -625,7 +708,7 @@ function nonempty(/* ... */) {
 
 /**
  * Invokes the "new" operator with a vector of arguments. There is no way to
- * call_user_func_array() on a class constructor, so you can instead use this
+ * `call_user_func_array()` on a class constructor, so you can instead use this
  * function:
  *
  *   $obj = newv($class_name, $argv);
@@ -640,7 +723,7 @@ function nonempty(/* ... */) {
  *
  *   - Build a fake serialized object and unserialize it.
  *   - Invoke the constructor twice.
- *   - just use eval() lol
+ *   - just use `eval()` lol
  *
  * These are really bad solutions to the problem because they can have side
  * effects (e.g., __wakeup()) and give you an object in an otherwise impossible
@@ -648,8 +731,8 @@ function nonempty(/* ... */) {
  *
  * If you own the classes you're doing this for, you should consider whether
  * or not restructuring your code (for instance, by creating static
- * construction methods) might make it cleaner before using newv(). Static
- * constructors can be invoked with call_user_func_array(), and may give your
+ * construction methods) might make it cleaner before using `newv()`. Static
+ * constructors can be invoked with `call_user_func_array()`, and may give your
  * class a cleaner and more descriptive API.
  *
  * @param  string  The name of a class.
@@ -680,7 +763,7 @@ function head(array $arr) {
 }
 
 /**
- * Returns the last element of an array. This is exactly like end() except
+ * Returns the last element of an array. This is exactly like `end()` except
  * that it won't warn you if you pass some non-referencable array to
  * it -- e.g., the result of some other array operation.
  *
@@ -736,8 +819,9 @@ function array_mergev(array $arrayv) {
     if (!is_array($item)) {
       throw new InvalidArgumentException(
         pht(
-          'Expected all items passed to array_mergev() to be arrays, but '.
+          'Expected all items passed to `%s` to be arrays, but '.
           'argument with key "%s" has type "%s".',
+          __FUNCTION__.'()',
           $key,
           gettype($item)));
     }
@@ -838,9 +922,6 @@ function array_interleave($interleave, array $array) {
   return $result;
 }
 
-/**
- * @group library
- */
 function phutil_is_windows() {
   // We can also use PHP_OS, but that's kind of sketchy because it returns
   // "WINNT" for Windows 7 and "Darwin" for Mac OS X. Practically, testing for
@@ -848,27 +929,8 @@ function phutil_is_windows() {
   return (DIRECTORY_SEPARATOR != '/');
 }
 
-/**
- * @group library
- */
 function phutil_is_hiphop_runtime() {
   return (array_key_exists('HPHP', $_ENV) && $_ENV['HPHP'] === 1);
-}
-
-/**
- * Fire an event allowing any listeners to clear up any outstanding requirements
- * before the request completes abruptly.
- *
- * @param int|string $status
- * @group library
- */
-function phutil_exit($status = 0) {
-  $event = new PhutilEvent(
-    PhutilEventType::TYPE_WILLEXITABRUPTLY,
-    array('status' => $status));
-  PhutilEventEngine::dispatchEvent($event);
-
-  exit($status);
 }
 
 /**
@@ -928,7 +990,7 @@ function phutil_loggable_string($string) {
  * @param resource  Socket or pipe stream.
  * @param string    Bytes to write.
  * @return bool|int Number of bytes written, or `false` on any error (including
- *                  errors which `fpipe()` can not detect, like a broken pipe).
+ *                  errors which `fwrite()` can not detect, like a broken pipe).
  */
 function phutil_fwrite_nonblocking_stream($stream, $bytes) {
   if (!strlen($bytes)) {
@@ -994,19 +1056,21 @@ function phutil_fwrite_nonblocking_stream($stream, $bytes) {
  * @return  int     Quantity of specified unit.
  */
 function phutil_units($description) {
-
   $matches = null;
   if (!preg_match('/^(\d+) (\w+) in (\w+)$/', $description, $matches)) {
     throw new InvalidArgumentException(
       pht(
         'Unable to parse unit specification (expected a specification in the '.
-        'form "5 days in seconds"): %s',
+        'form "%s"): %s',
+        '5 days in seconds',
         $description));
   }
 
   $quantity = (int)$matches[1];
   $src_unit = $matches[2];
   $dst_unit = $matches[3];
+
+  $is_divisor = false;
 
   switch ($dst_unit) {
     case 'seconds':
@@ -1034,6 +1098,24 @@ function phutil_units($description) {
               $src_unit));
       }
       break;
+    case 'bytes':
+      switch ($src_unit) {
+        case 'byte':
+        case 'bytes':
+          $factor = 1;
+          break;
+        case 'bit':
+        case 'bits':
+          $factor = 8;
+          $is_divisor = true;
+          break;
+        default:
+          throw new InvalidArgumentException(
+            pht(
+              'This function can not convert from the unit "%s".',
+              $src_unit));
+      }
+      break;
     default:
       throw new InvalidArgumentException(
         pht(
@@ -1041,27 +1123,214 @@ function phutil_units($description) {
           $dst_unit));
   }
 
-  return $quantity * $factor;
+  if ($is_divisor) {
+    if ($quantity % $factor) {
+      throw new InvalidArgumentException(
+        pht(
+          '"%s" is not an exact quantity.',
+          $description));
+    }
+    return (int)($quantity / $factor);
+  } else {
+    return $quantity * $factor;
+  }
 }
 
 
 /**
- * Decode a JSON dictionary, or return a default value if the input does not
- * decode or does not decode into a dictionary.
+ * Decode a JSON dictionary.
  *
  * @param   string    A string which ostensibly contains a JSON-encoded list or
  *                    dictionary.
- * @param   default?  Optional default value to return if the string does not
- *                    decode, or does not decode into a list or dictionary.
- * @return  mixed     Decoded list/dictionary, or default value if string
- *                    failed to decode.
+ * @return  mixed     Decoded list/dictionary.
  */
-function phutil_json_decode($string, $default = array()) {
+function phutil_json_decode($string) {
   $result = @json_decode($string, true);
+
   if (!is_array($result)) {
-    return $default;
+    // Failed to decode the JSON. Try to use @{class:PhutilJSONParser} instead.
+    // This will probably fail, but will throw a useful exception.
+    $parser = new PhutilJSONParser();
+    $result = $parser->parse($string);
   }
+
   return $result;
+}
+
+
+/**
+ * Encode a value in JSON, raising an exception if it can not be encoded.
+ *
+ * @param wild A value to encode.
+ * @return string JSON representation of the value.
+ */
+function phutil_json_encode($value) {
+  $result = @json_encode($value);
+  if ($result === false) {
+    $reason = phutil_validate_json($value);
+    if (function_exists('json_last_error')) {
+      $err = json_last_error();
+      if (function_exists('json_last_error_msg')) {
+        $msg = json_last_error_msg();
+        $extra = pht('#%d: %s', $err, $msg);
+      } else {
+        $extra = pht('#%d', $err);
+      }
+    } else {
+      $extra = null;
+    }
+
+    if ($extra) {
+      $message = pht(
+        'Failed to JSON encode value (%s): %s.',
+        $extra,
+        $reason);
+    } else {
+      $message = pht(
+        'Failed to JSON encode value: %s.',
+        $reason);
+    }
+
+    throw new Exception($message);
+  }
+
+  return $result;
+}
+
+
+/**
+ * Produce a human-readable explanation why a value can not be JSON-encoded.
+ *
+ * @param wild Value to validate.
+ * @param string Path within the object to provide context.
+ * @return string|null Explanation of why it can't be encoded, or null.
+ */
+function phutil_validate_json($value, $path = '') {
+  if ($value === null) {
+    return;
+  }
+
+  if ($value === true) {
+    return;
+  }
+
+  if ($value === false) {
+    return;
+  }
+
+  if (is_int($value)) {
+    return;
+  }
+
+  if (is_float($value)) {
+    return;
+  }
+
+  if (is_array($value)) {
+    foreach ($value as $key => $subvalue) {
+      if (strlen($path)) {
+        $full_key = $path.' > ';
+      } else {
+        $full_key = '';
+      }
+
+      if (!phutil_is_utf8($key)) {
+        $full_key = $full_key.phutil_utf8ize($key);
+        return pht(
+          'Dictionary key "%s" is not valid UTF8, and cannot be JSON encoded.',
+          $full_key);
+      }
+
+      $full_key .= $key;
+      $result = phutil_validate_json($subvalue, $full_key);
+      if ($result !== null) {
+        return $result;
+      }
+    }
+  }
+
+  if (is_string($value)) {
+    if (!phutil_is_utf8($value)) {
+      $display = substr($value, 0, 256);
+      $display = phutil_utf8ize($display);
+      if (!strlen($path)) {
+        return pht(
+          'String value is not valid UTF8, and can not be JSON encoded: %s',
+          $display);
+      } else {
+        return pht(
+          'Dictionary value at key "%s" is not valid UTF8, and cannot be '.
+          'JSON encoded: %s',
+          $path,
+          $display);
+      }
+    }
+  }
+
+  return;
+}
+
+
+/**
+ * Decode an INI string.
+ *
+ * @param  string
+ * @return mixed
+ */
+function phutil_ini_decode($string) {
+  $results = null;
+  $trap = new PhutilErrorTrap();
+
+  try {
+    if (!function_exists('parse_ini_string')) {
+      throw new PhutilMethodNotImplementedException(
+        pht(
+          '%s is not compatible with your version of PHP (%s). This function '.
+          'is only supported on PHP versions newer than 5.3.0.',
+          __FUNCTION__,
+          phpversion()));
+    }
+
+    $results = @parse_ini_string($string, true, INI_SCANNER_RAW);
+
+    if ($results === false) {
+      throw new PhutilINIParserException(trim($trap->getErrorsAsString()));
+    }
+
+    foreach ($results as $section => $result) {
+      if (!is_array($result)) {
+        // We JSON decode the value in ordering to perform the following
+        // conversions:
+        //
+        //   - `'true'` => `true`
+        //   - `'false'` => `false`
+        //   - `'123'` => `123`
+        //   - `'1.234'` => `1.234`
+        //
+        $result = json_decode($result, true);
+
+        if ($result !== null && !is_array($result)) {
+          $results[$section] = $result;
+        }
+
+        continue;
+      }
+
+      foreach ($result as $key => $value) {
+        $value = json_decode($value, true);
+
+        if ($value !== null && !is_array($value)) {
+          $results[$section][$key] = $value;
+        }
+      }
+    }
+  } catch (Exception $ex) {
+    $trap->destroy();
+    throw $ex;
+  }
+
+  $trap->destroy();
+  return $results;
 }
 
 
@@ -1077,5 +1346,171 @@ function phutil_json_decode($string, $default = array()) {
  *                  be identified censored.
  */
 function phutil_censor_credentials($string) {
-  return preg_replace(',(?<=://)([^/@\s]+)(?=@|$),', 'xxxxx', $string);
+  return preg_replace(',(?<=://)([^/@\s]+)(?=@|$),', '********', $string);
+}
+
+
+/**
+ * Returns a parsable string representation of a variable.
+ *
+ * This function is intended to behave similarly to PHP's `var_export` function,
+ * but the output is intended to follow our style conventions.
+ *
+ * @param  wild    The variable you want to export.
+ * @return string
+ */
+function phutil_var_export($var) {
+  // `var_export(null, true)` returns `"NULL"` (in uppercase).
+  if ($var === null) {
+    return 'null';
+  }
+
+  // PHP's `var_export` doesn't format arrays very nicely. In particular:
+  //
+  //   - An empty array is split over two lines (`"array (\n)"`).
+  //   - A space separates "array" and the first opening brace.
+  //   - Non-associative arrays are returned as associative arrays with an
+  //     integer key.
+  //
+  if (is_array($var)) {
+    if (count($var) === 0) {
+      return 'array()';
+    }
+
+    // Don't show keys for non-associative arrays.
+    $show_keys = (array_keys($var) !== range(0, count($var) - 1));
+
+    $output = array();
+    $output[] = 'array(';
+
+    foreach ($var as $key => $value) {
+      // Adjust the indentation of the value.
+      $value = str_replace("\n", "\n  ", phutil_var_export($value));
+      $output[] = '  '.
+        ($show_keys ? var_export($key, true).' => ' : '').
+        $value.',';
+    }
+
+    $output[] = ')';
+    return implode("\n", $output);
+  }
+
+  // Let PHP handle everything else.
+  return var_export($var, true);
+}
+
+
+/**
+ * An improved version of `fnmatch`.
+ *
+ * @param  string  A glob pattern.
+ * @param  string  A path.
+ * @return bool
+ */
+function phutil_fnmatch($glob, $path) {
+  // Modify the glob to allow `**/` to match files in the root directory.
+  $glob = preg_replace('@(?:(?<!\\\\)\\*){2}/@', '{,*/,**/}', $glob);
+
+  $escaping = false;
+  $in_curlies = 0;
+  $regex = '';
+
+  for ($i = 0; $i < strlen($glob); $i++) {
+    $char = $glob[$i];
+    $next_char = ($i < strlen($glob) - 1) ? $glob[$i + 1] : null;
+
+    $escape = array('$', '(', ')', '+', '.', '^', '|');
+    $mapping = array();
+
+    if ($escaping) {
+      $escape[] = '*';
+      $escape[] = '?';
+      $escape[] = '{';
+    } else {
+      $mapping['*'] = $next_char === '*' ? '.*' : '[^/]*';
+      $mapping['?'] = '[^/]';
+      $mapping['{'] = '(';
+
+      if ($in_curlies) {
+        $mapping[','] = '|';
+        $mapping['}'] = ')';
+      }
+    }
+
+    if (in_array($char, $escape)) {
+      $regex .= "\\{$char}";
+    } else if ($replacement = idx($mapping, $char)) {
+      $regex .= $replacement;
+    } else if ($char === '\\') {
+      if ($escaping) {
+        $regex .= '\\\\';
+      }
+      $escaping = !$escaping;
+      continue;
+    } else {
+      $regex .= $char;
+    }
+
+    if ($char === '{' && !$escaping) {
+      $in_curlies++;
+    } else if ($char === '}' && $in_curlies && !$escaping) {
+      $in_curlies--;
+    }
+
+    $escaping = false;
+  }
+
+  if ($in_curlies || $escaping) {
+    throw new InvalidArgumentException(pht('Invalid glob pattern.'));
+  }
+
+  $regex = '(\A'.$regex.'\z)';
+  return (bool)preg_match($regex, $path);
+}
+
+
+/**
+ * Compare two hashes for equality.
+ *
+ * This function defuses two attacks: timing attacks and type juggling attacks.
+ *
+ * In a timing attack, the attacker observes that strings which match the
+ * secret take slightly longer to fail to match because more characters are
+ * compared. By testing a large number of strings, they can learn the secret
+ * character by character. This defuses timing attacks by always doing the
+ * same amount of work.
+ *
+ * In a type juggling attack, an attacker takes advantage of PHP's type rules
+ * where `"0" == "0e12345"` for any exponent. A portion of of hexadecimal
+ * hashes match this pattern and are vulnerable. This defuses this attack by
+ * performing bytewise character-by-character comparison.
+ *
+ * It is questionable how practical these attacks are, but they are possible
+ * in theory and defusing them is straightforward.
+ *
+ * @param string First hash.
+ * @param string Second hash.
+ * @return bool True if hashes are identical.
+ */
+function phutil_hashes_are_identical($u, $v) {
+  if (!is_string($u)) {
+    throw new Exception(pht('First hash argument must be a string.'));
+  }
+
+  if (!is_string($v)) {
+    throw new Exception(pht('Second hash argument must be a string.'));
+  }
+
+  if (strlen($u) !== strlen($v)) {
+    return false;
+  }
+
+  $len = strlen($v);
+
+  $bits = 0;
+  for ($ii = 0; $ii < $len; $ii++) {
+    $bits |= (ord($u[$ii]) ^ ord($v[$ii]));
+  }
+
+  return ($bits === 0);
 }

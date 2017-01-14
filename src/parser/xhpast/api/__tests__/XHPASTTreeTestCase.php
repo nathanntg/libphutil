@@ -2,20 +2,19 @@
 
 /**
  * @nolint We test crazy stuff here.
- * @group xhpast
  */
 final class XHPASTTreeTestCase extends PhutilTestCase {
 
   public function testEvalStaticString() {
     $this->assertEval(1,    '1');
-    $this->assertEval("a",  '"a"');
+    $this->assertEval('a',  '"a"');
     $this->assertEval(-1.1, '-1.1');
     $this->assertEval(
        array('foo', 'bar', -1, +2, -3.4, +4.3, 1e10, 1e-5, -2.3e7),
       "array('foo', 'bar', -1, +2, -3.4, +4.3, 1e10, 1e-5, -2.3e7)");
     $this->assertEval(
        array(),
-      "array()");
+      'array()');
     $this->assertEval(
        array(42 => 7, 'a' => 5, 1, 2, 3, 4, 1 => 'goo'),
       "array(42 => 7, 'a' => 5, 1, 2, 3, 4, 1 => 'goo')");
@@ -24,7 +23,7 @@ final class XHPASTTreeTestCase extends PhutilTestCase {
       "array('a' => 'a', 'b' => array(1, 2, array(3)))");
     $this->assertEval(
        array(true, false, null),
-      "array(true, false, null)");
+      'array(true, false, null)');
 
     // Duplicate keys
     $this->assertEval(
@@ -34,11 +33,11 @@ final class XHPASTTreeTestCase extends PhutilTestCase {
     $this->assertEval('simple string', "'simple string'");
     $this->assertEval('42', "'42'");
     $this->assertEval('binary string', "b'binary string'");
-    $this->assertEval(3.1415926, "3.1415926");
+    $this->assertEval(3.1415926, '3.1415926');
     $this->assertEval(42, '42');
     $this->assertEval(
        array(2147483648, 2147483647, -2147483648, -2147483647),
-      "array(2147483648, 2147483647, -2147483648, -2147483647)");
+      'array(2147483648, 2147483647, -2147483648, -2147483647)');
 
     $this->assertEval(INF, 'INF');
     $this->assertEval(-INF, '-INF');
@@ -48,7 +47,8 @@ final class XHPASTTreeTestCase extends PhutilTestCase {
 
     // Octal
     $this->assertEval(010, '010');
-    $this->assertEval(080, '080');  // Invalid!
+    // TODO: this passes on < PHP 7 for some reason but fails on PHP 7 correctly
+    //$this->assertEval(080, '080');  // Invalid!
 
     // Leading 0, but float, not octal.
     $this->assertEval(0.11e1, '0.11e1');
@@ -128,7 +128,6 @@ final class XHPASTTreeTestCase extends PhutilTestCase {
     $this->assertEval(
       "\xg",
       '"\xg"');
-
   }
 
   private function assertEval($value, $string) {
@@ -139,5 +138,3 @@ final class XHPASTTreeTestCase extends PhutilTestCase {
   }
 
 }
-
-

@@ -1,8 +1,5 @@
 <?php
 
-/**
- * @group testcase
- */
 final class PhutilJSONTestCase extends PhutilTestCase {
 
   public function testEmptyArrayEncoding() {
@@ -10,7 +7,7 @@ final class PhutilJSONTestCase extends PhutilTestCase {
 
     $expect = <<<EOJSON
 {
-  "x" : []
+  "x": []
 }
 
 EOJSON;
@@ -18,7 +15,7 @@ EOJSON;
     $this->assertEqual(
       $expect,
       $serializer->encodeFormatted(array('x' => array())),
-      'Empty arrays should serialize as [], not {}.');
+      pht('Empty arrays should serialize as `%s`, not `%s`.', '[]', '{}'));
   }
 
 }

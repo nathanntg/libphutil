@@ -1,9 +1,6 @@
 <?php
 
-/**
- * @group console
- */
-final class PhutilConsoleServer {
+final class PhutilConsoleServer extends Phobject {
 
   private $clients = array();
   private $handler;
@@ -91,7 +88,9 @@ final class PhutilConsoleServer {
           return call_user_func($this->handler, $message);
         } else {
           throw new Exception(
-            "Received unknown console message of type '{$type}'.");
+            pht(
+              "Received unknown console message of type '%s'.",
+              $type));
         }
 
     }

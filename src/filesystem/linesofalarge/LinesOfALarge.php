@@ -11,7 +11,7 @@
  * simpler) to read the entire stream first and then process it (e.g., with
  * `explode()`).
  *
- * This class is abstract. The concrete implementations avialable are:
+ * This class is abstract. The concrete implementations available are:
  *
  *   - @{class:LinesOfALargeFile}, for reading large files; and
  *   - @{class:LinesOfALargeExecFuture}, for reading large output from
@@ -24,7 +24,7 @@
  *   }
  *
  * By default, a line is delimited by "\n". The delimiting character is
- * not returned. You can change the charater with @{method:setDelimiter}. The
+ * not returned. You can change the character with @{method:setDelimiter}. The
  * last part of the file is returned as the last $line, even if it does not
  * include a terminating character (if it does, the terminating character is
  * stripped).
@@ -32,9 +32,8 @@
  * @task  config    Configuration
  * @task  internals Internals
  * @task  iterator  Iterator Interface
- * @group filesystem
  */
-abstract class LinesOfALarge implements Iterator {
+abstract class LinesOfALarge extends Phobject implements Iterator {
 
   private $pos;
   private $buf;
@@ -43,7 +42,7 @@ abstract class LinesOfALarge implements Iterator {
   private $valid;
   private $eof;
 
-  private $delimiter      = "\n";
+  private $delimiter = "\n";
 
 
 /* -(  Configuration  )------------------------------------------------------ */
@@ -53,13 +52,18 @@ abstract class LinesOfALarge implements Iterator {
    * Change the "line" delimiter character, which defaults to "\n". This is
    * used to determine where each line ends.
    *
-   * @param string A one-byte delimiter character.
+   * If you pass `null`, data will be read from source as it becomes available,
+   * without looking for delimiters. You can use this to stream a large file or
+   * the output of a command which returns a large amount of data.
+   *
+   * @param string|null A one-byte delimiter character.
    * @return this
    * @task config
    */
   final public function setDelimiter($character) {
-    if (strlen($character) !== 1) {
-      throw new Exception('Delimiter character MUST be one byte in length.');
+    if (($character !== null) && (strlen($character) !== 1)) {
+      throw new Exception(
+        pht('Delimiter character must be one byte in length or null.'));
     }
     $this->delimiter = $character;
     return $this;
@@ -136,7 +140,6 @@ abstract class LinesOfALarge implements Iterator {
    * @task iterator
    */
   final public function next() {
-
     // Consume the stream a chunk at a time into an internal buffer, then
     // read lines out of that buffer. This gives us flexibility (stream sources
     // only need to be able to read blocks of bytes) and performance (we can
@@ -148,6 +151,16 @@ abstract class LinesOfALarge implements Iterator {
     // read.
     while (true) {
       if (strlen($this->buf)) {
+
+        // If we don't have a delimiter, return the entire buffer.
+        if ($this->delimiter === null) {
+          $this->num++;
+          $this->line = substr($this->buf, $this->pos);
+          $this->buf = '';
+          $this->pos = 0;
+          return;
+        }
+
         // If we already have some data buffered, try to get the next line from
         // the buffer. Search through the buffer for a delimiter. This should be
         // the common case.
@@ -194,7 +207,7 @@ abstract class LinesOfALarge implements Iterator {
         // No more bytes. If we have a buffer, return its contents. We
         // potentially return part of a line here if the last line had no
         // delimiter, but that currently seems reasonable as a default
-        // behaivor. If we don't have a buffer, we're done.
+        // behavior. If we don't have a buffer, we're done.
         $this->eof = true;
         if (strlen($this->buf)) {
           $this->num++;

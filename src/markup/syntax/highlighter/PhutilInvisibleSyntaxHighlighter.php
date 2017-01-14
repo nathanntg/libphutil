@@ -1,9 +1,6 @@
 <?php
 
-/**
- * @group markup
- */
-final class PhutilInvisibleSyntaxHighlighter {
+final class PhutilInvisibleSyntaxHighlighter extends Phobject {
 
   private $config = array();
 
@@ -42,4 +39,5 @@ final class PhutilInvisibleSyntaxHighlighter {
   private function decimalToHtmlEntityDecoded($dec) {
     return html_entity_decode("&#{$dec};");
   }
+
 }

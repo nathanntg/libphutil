@@ -1,8 +1,5 @@
 <?php
 
-/**
- * @group console
- */
 function phutil_console_format($format /* ... */) {
   $args = func_get_args();
   return call_user_func_array(
@@ -11,9 +8,6 @@ function phutil_console_format($format /* ... */) {
 }
 
 
-/**
- * @group console
- */
 function phutil_console_confirm($prompt, $default_no = true) {
   $prompt_options = $default_no ? '[y/N]' : '[Y/n]';
 
@@ -30,12 +24,22 @@ function phutil_console_confirm($prompt, $default_no = true) {
   }
 }
 
+function phutil_console_select($prompt, $min, $max) {
+  $select_options = '['.$min.' - '.$max.']';
+  do {
+    $response = phutil_console_prompt($prompt.' '.$select_options);
+    $selection = trim($response);
 
-/**
- * @group console
- */
+    if (preg_match('/^\d+\z/', $selection)) {
+      $selection = (int)$selection;
+      if ($selection >= $min && $selection <= $max) {
+        return $selection;
+      }
+    }
+  } while (true);
+}
+
 function phutil_console_prompt($prompt, $history = '') {
-
   echo "\n\n";
   $prompt = phutil_console_wrap($prompt.' ', 4);
 
@@ -47,7 +51,9 @@ function phutil_console_prompt($prompt, $history = '') {
     throw $ex;
   }
 
-  $use_history = true;
+  // `escapeshellarg` makes double quotes in the command below disappear on
+  // Windows, which breaks prompts when using history. See T6348
+  $use_history = !phutil_is_windows();
   if ($history == '') {
     $use_history = false;
   } else {
@@ -55,8 +61,6 @@ function phutil_console_prompt($prompt, $history = '') {
     list($err) = exec_manual('bash -c %s', 'true');
     if ($err) {
       $use_history = false;
-    } else if (phutil_is_windows()) {
-      $history = str_replace('\\', '/', $history);
     }
   }
 
@@ -92,11 +96,10 @@ function phutil_console_prompt($prompt, $history = '') {
  *
  * @param   string  Text to wrap.
  * @param   int     Optional indent level.
+ * @param   bool    True to also indent the first line.
  * @return  string  Wrapped text.
- *
- * @group console
  */
-function phutil_console_wrap($text, $indent = 0) {
+function phutil_console_wrap($text, $indent = 0, $with_prefix = true) {
   $lines = array();
 
   $width = (78 - $indent);
@@ -175,16 +178,19 @@ function phutil_console_wrap($text, $indent = 0) {
   }
 
   foreach ($lines as $idx => $line) {
-    $lines[$idx] = $pre.implode('', $line);
+    if ($idx == 0 && !$with_prefix) {
+      $prefix = null;
+    } else {
+      $prefix = $pre;
+    }
+
+    $lines[$idx] = $prefix.implode('', $line);
   }
 
   return implode('', $lines);
 }
 
 
-/**
- * @group console
- */
 function phutil_console_require_tty() {
   if (function_exists('posix_isatty') && !posix_isatty(STDIN)) {
     throw new PhutilConsoleStdinNotInteractiveException();
@@ -196,34 +202,37 @@ function phutil_console_require_tty() {
  * Determine the width of the terminal, if possible. Returns `null` on failure.
  *
  * @return int|null Terminal width in characters, or null on failure.
- * @group console
  */
 function phutil_console_get_terminal_width() {
-  if (phutil_is_windows()) {
-    // TODO: Figure out how to get this working in Windows.
-    return null;
+  static $width;
+
+  if ($width === null) {
+    if (phutil_is_windows()) {
+      // TODO: Figure out how to get this working in Windows.
+      return null;
+    }
+
+    $tmp = new TempFile();
+
+    // NOTE: We can't just execute this because it won't be connected to a TTY
+    // if we do.
+    $err = phutil_passthru('tput cols > %s', $tmp);
+
+    if ($err) {
+      return null;
+    }
+
+    try {
+      $cols = Filesystem::readFile($tmp);
+    } catch (FilesystemException $ex) {
+      return null;
+    }
+
+    $width = (int)$cols;
+    if (!$width) {
+      $width = null;
+    }
   }
 
-  $tmp = new TempFile();
-
-  // NOTE: We can't just execute this because it won't be connected to a TTY
-  // if we do.
-  $err = phutil_passthru('tput cols > %s', $tmp);
-
-  if ($err) {
-    return null;
-  }
-
-  try {
-    $cols = Filesystem::readFile($tmp);
-  } catch (FilesystemException $ex) {
-    return null;
-  }
-
-  $cols = (int)$cols;
-  if (!$cols) {
-    return null;
-  }
-
-  return $cols;
+  return $width;
 }

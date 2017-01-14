@@ -1,10 +1,6 @@
 <?php
 
-/**
- * @group markup
- * @stable
- */
-abstract class PhutilRemarkupBlockInterpreter {
+abstract class PhutilRemarkupBlockInterpreter extends Phobject {
 
   private $engine;
 

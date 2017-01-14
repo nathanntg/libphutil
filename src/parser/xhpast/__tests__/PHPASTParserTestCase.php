@@ -3,40 +3,37 @@
 final class PHPASTParserTestCase extends PhutilTestCase {
 
   public function testParser() {
-    if (!xhpast_is_available()) {
-      $this->assertSkipped(pht('xhpast is not built or not up to date.'));
+    if (!PhutilXHPASTBinary::isAvailable()) {
+      try {
+        PhutilXHPASTBinary::build();
+      } catch (Exception $ex) {
+        $this->assertSkipped(
+          pht('%s is not built or not up to date.', 'xhpast'));
+      }
     }
 
     $dir = dirname(__FILE__).'/data/';
     foreach (Filesystem::listDirectory($dir) as $file) {
       if (preg_match('/\.test$/', $file)) {
-        $this->executeParserTest($file, Filesystem::readFile($dir.$file));
+        $this->executeParserTest($file, $dir.$file);
       }
     }
   }
 
-  private function executeParserTest($name, $data) {
-    $data = explode("\n", $data, 2);
-    if (count($data) !== 2) {
-      throw new Exception(
-        pht('Expected multiple lines in parser test file "%s".', $name));
-    }
+  private function executeParserTest($name, $file) {
+    $contents = Filesystem::readFile($file);
+    $contents = preg_split('/^~{4,}\n/m', $contents);
 
-    $head = head($data);
-    $body = last($data);
-
-    if (!preg_match('/^#/', $head)) {
+    if (count($contents) < 2) {
       throw new Exception(
         pht(
-          'Expected first line of parser test file "%s" to begin with "#" '.
-          'and specify test options.',
-          $name));
+          "Expected '%s' separating test case and results.",
+          '~~~~~~~~~~'));
     }
 
-    $head = preg_replace('/^#\s*/', '', $head);
+    list($data, $options, $expect) = array_merge($contents, array(null));
 
-    $options_parser = new PhutilSimpleOptions();
-    $options = $options_parser->parse($head);
+    $options = id(new PhutilSimpleOptions())->parse($options);
 
     $type = null;
     foreach ($options as $key => $value) {
@@ -47,7 +44,7 @@ final class PHPASTParserTestCase extends PhutilTestCase {
           if ($type !== null) {
             throw new Exception(
               pht(
-                'Test file "%s" unexpectedly specifies multiple expected ',
+                'Test file "%s" unexpectedly specifies multiple expected '.
                 'test outcomes.',
                 $name));
           }
@@ -58,7 +55,7 @@ final class PHPASTParserTestCase extends PhutilTestCase {
           break;
         case 'rtrim':
           // Allows construction of tests which rely on EOF without newlines.
-          $body = rtrim($body);
+          $data = rtrim($data);
           break;
         default:
           throw new Exception(
@@ -78,7 +75,7 @@ final class PHPASTParserTestCase extends PhutilTestCase {
           $name));
     }
 
-    $future = xhpast_get_parser_future($body);
+    $future = PhutilXHPASTBinary::getParserFuture($data);
     list($err, $stdout, $stderr) = $future->resolve();
 
     switch ($type) {
@@ -86,26 +83,29 @@ final class PHPASTParserTestCase extends PhutilTestCase {
       case 'fail-parse':
         $this->assertEqual(0, $err, pht('Exit code for "%s".', $name));
 
-        $expect_name = preg_replace('/\.test$/', '.expect', $name);
-
-        $dir = dirname(__FILE__).'/data/';
-        $expect = Filesystem::readFile($dir.$expect_name);
-
-        $expect = json_decode($expect, true);
-        if (!is_array($expect)) {
-          throw new Exception(
-            pht(
-              'Test ".expect" file "%s" for test "%s" is not valid JSON.',
-              $expect_name,
-              $name));
+        if (!strlen($expect)) {
+          // If there's no "expect" data in the test case, that's OK.
+          break;
         }
 
-        $stdout = json_decode($stdout, true);
-        if (!is_array($stdout)) {
-          throw new Exception(
+        try {
+          $expect = phutil_json_decode($expect);
+        } catch (PhutilJSONParserException $ex) {
+          throw new PhutilProxyException(
+            pht(
+              'Expect data for test "%s" is not valid JSON.',
+              $name),
+            $ex);
+        }
+
+        try {
+          $stdout = phutil_json_decode($stdout);
+        } catch (PhutilJSONParserException $ex) {
+          throw new PhutilProxyException(
             pht(
               'Output for test file "%s" is not valid JSON.',
-              $name));
+              $name),
+            $ex);
         }
 
         $json = new PhutilJSON();

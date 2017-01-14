@@ -71,17 +71,16 @@
  * @{method:isExecutable}. In this case, the parser will automatically select
  * your workflow when the user invokes it.
  *
- * @stable
  * @concrete-extensible
- * @group console
  */
-class PhutilArgumentWorkflow {
+class PhutilArgumentWorkflow extends Phobject {
 
   private $name;
   private $synopsis;
   private $specs = array();
   private $examples;
   private $help;
+  private $argv;
 
   final public function __construct() {
     $this->didConstruct();
@@ -156,6 +155,15 @@ class PhutilArgumentWorkflow {
     return $this->specs;
   }
 
+  final public function setArgv(PhutilArgumentParser $argv) {
+    $this->argv = $argv;
+    return $this;
+  }
+
+  final public function getArgv() {
+    return $this->argv;
+  }
+
   protected function didConstruct() {
     return null;
   }
@@ -165,7 +173,7 @@ class PhutilArgumentWorkflow {
   }
 
   public function execute(PhutilArgumentParser $args) {
-    throw new Exception("This workflow isn't executable!");
+    throw new Exception(pht("This workflow isn't executable!"));
   }
 
   /**

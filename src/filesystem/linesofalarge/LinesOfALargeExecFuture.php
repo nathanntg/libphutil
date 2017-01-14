@@ -21,7 +21,6 @@
  *
  * @task construct  Construction
  * @task internals  Internals
- * @group filesystem
  */
 final class LinesOfALargeExecFuture extends LinesOfALarge {
 
@@ -61,8 +60,8 @@ final class LinesOfALargeExecFuture extends LinesOfALarge {
 
 
   /**
-   * The PHP foreach() construct calls rewind() once, so we allow the first
-   * rewind(), without effect. Subsequent rewinds mean misuse.
+   * The PHP `foreach()` construct calls rewind() once, so we allow the first
+   * `rewind()`, without effect. Subsequent rewinds mean misuse.
    *
    * @return void
    * @task internals
@@ -70,9 +69,11 @@ final class LinesOfALargeExecFuture extends LinesOfALarge {
   protected function willRewind() {
     if ($this->didRewind) {
       throw new Exception(
-        "You can not reiterate over a LinesOfALargeExecFuture object. The ".
-        "entire goal of the construct is to avoid keeping output in memory. ".
-        "What you are attempting to do is silly and doesn't make any sense.");
+        pht(
+          "You can not reiterate over a %s object. The entire goal of the ".
+          "construct is to avoid keeping output in memory. What you are ".
+          "attempting to do is silly and doesn't make any sense.",
+          __CLASS__));
     }
     $this->didRewind = true;
   }
@@ -101,7 +102,7 @@ final class LinesOfALargeExecFuture extends LinesOfALarge {
       // has exited.
 
       if ($future->isReady()) {
-        // Throw if the process exits with a nozero status code. This makes
+        // Throw if the process exits with a nonzero status code. This makes
         // error handling simpler, and prevents us from returning part of a line
         // if the process terminates mid-output.
         $future->resolvex();

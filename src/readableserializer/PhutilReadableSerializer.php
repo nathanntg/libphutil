@@ -6,9 +6,8 @@
  *
  * @task print Printing PHP Values
  * @task internal Internals
- * @group error
  */
-final class PhutilReadableSerializer {
+final class PhutilReadableSerializer extends Phobject {
 
 
 /* -(  Printing PHP Values  )------------------------------------------------ */
@@ -33,6 +32,8 @@ final class PhutilReadableSerializer {
       return 'true';
     } else if (is_float($value) && (int)$value == $value) {
       return $value.'.0';
+    } else if (is_string($value)) {
+      return "'".$value."'";
     } else {
       return print_r($value, true);
     }
@@ -61,14 +62,19 @@ final class PhutilReadableSerializer {
       }
       return $str;
     } else {
-      // NOTE: Avoid phutil_utf8_shorten() here since the data may not be
+      // NOTE: Avoid PhutilUTF8StringTruncator here since the data may not be
       // UTF8 anyway, it's slow for large inputs, and it might not be loaded
       // yet.
       $limit = 1024;
       $str = self::printableValue($value);
       if (strlen($str) > $limit) {
-        $str = substr($str, 0, $limit).'...';
+        if (is_string($value)) {
+          $str = "'".substr($str, 1, $limit)."...'";
+        } else {
+          $str = substr($str, 0, $limit).'...';
+        }
       }
+
       return $str;
     }
   }
@@ -76,9 +82,9 @@ final class PhutilReadableSerializer {
 
   /**
    * Dump some debug output about an object's members without the
-   * potential recursive explosion of verbosity that comes with ##print_r()##.
+   * potential recursive explosion of verbosity that comes with `print_r()`.
    *
-   * To print any number of member variables, pass null for $max_members.
+   * To print any number of member variables, pass null for `$max_members`.
    *
    * @param wild Any value.
    * @param int Maximum depth to print for nested arrays and objects.
@@ -161,7 +167,8 @@ final class PhutilReadableSerializer {
 
 
   /**
-   * Adds indentation to the beginning of every line starting from $first_line.
+   * Adds indentation to the beginning of every line starting from
+   * `$first_line`.
    *
    * @param string Printed value.
    * @param string String to indent with.
@@ -178,4 +185,5 @@ final class PhutilReadableSerializer {
 
     return implode("\n", $out);
   }
+
 }

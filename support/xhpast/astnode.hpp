@@ -20,6 +20,7 @@ namespace xhpast {
       Token(unsigned int type, char *value, unsigned int n) :
         type(type),
         value(value),
+        lineno(0),
         n(n) {
       }
   };
@@ -56,13 +57,15 @@ namespace xhpast {
 
       Node *appendChild(Node *node) {
         this->children.push_back(node);
-        return this->setEnd(node);
+        return this->expandRange(node);
       }
 
       Node *appendChildren(Node *node) {
-        for (node_list_t::iterator ii = node->children.begin(); ii != node->children.end(); ++ii) {
-          this->children.push_back(*ii);
-          this->setEnd(*ii);
+        for (node_list_t::iterator ii = node->children.begin();
+          ii != node->children.end();
+          ++ii) {
+
+          this->appendChild(*ii);
         }
         return this;
       }
@@ -79,33 +82,23 @@ namespace xhpast {
         return this;
       }
 
-      Node *setEnd(Node *n) {
+      Node *expandRange(Node *n) {
         if (!n) {
-          fprintf(stderr, "Trying to setEnd() a null node to one of type %d\n", this->type);
+          fprintf(
+            stderr,
+            "Trying to expandRange() a null node to one of type %d\n",
+            this->type);
           exit(1);
+        };
+
+        if (n->l_tok != -1 && (n->l_tok < this->l_tok || (this->l_tok == -1))) {
+          this->l_tok = n->l_tok;
         }
 
         if (n->r_tok != -1 && (n->r_tok > this->r_tok || (this->r_tok == -1))) {
           this->r_tok = n->r_tok;
         }
-        if (this->l_tok == -1) {
-          this->l_tok = n->l_tok;
-        }
-        return this;
-      }
 
-      Node *setBegin(Node *n) {
-        if (!n) {
-          fprintf(stderr, "Trying to setBegin() a null node to one of type %d\n", this->type);
-          exit(1);
-        }
-
-        if (n->l_tok != -1 && (n->l_tok < this->l_tok || (this->l_tok == -1))) {
-          this->l_tok = n->l_tok;
-        }
-        if (this->r_tok == -1) {
-          this->r_tok = n->r_tok;
-        }
         return this;
       }
 

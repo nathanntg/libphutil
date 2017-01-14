@@ -1,9 +1,6 @@
 <?php
 
-/**
- * @group markup
- */
-final class PhutilDefaultSyntaxHighlighter {
+final class PhutilDefaultSyntaxHighlighter extends Phobject {
 
   public function setConfig($key, $value) {
     return $this;
@@ -13,4 +10,5 @@ final class PhutilDefaultSyntaxHighlighter {
     $result = hsprintf('%s', $source);
     return new ImmediateFuture($result);
   }
+
 }

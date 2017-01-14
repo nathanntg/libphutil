@@ -8,8 +8,6 @@
  *
  * This lexer is not suitable for parser construction; it always lexes any
  * input stream, even if the input is not Python.
- *
- * @group lexer
  */
 final class PhutilPythonFragmentLexer extends PhutilLexer {
 
@@ -191,7 +189,7 @@ final class PhutilPythonFragmentLexer extends PhutilLexer {
       array(
         '\\\\([\\\\abfnrtv"\']|\n|N{.*?}|u[a-fA-F0-9]{4}|'.
         'U[a-fA-F0-9]{8}|x[a-fA-F0-9]{2}|[0-7]{1,3})',
-        'se'
+        'se',
       ),
     );
 
@@ -203,7 +201,7 @@ final class PhutilPythonFragmentLexer extends PhutilLexer {
       array(
         '%(\\(\\w+\\))?[-#0 +]*([0-9]+|[*])?(\\.([0-9]+|[*]))?'.
         '[hlL]?[diouxXeEfFgGcrs%]',
-        'si'
+        'si',
       ),
       array('[^\\\\\'"%\\n]+', 's'),
       // quotes, percents, and backslashes must be parsed one at a time
@@ -291,14 +289,14 @@ final class PhutilPythonFragmentLexer extends PhutilLexer {
         // never be a module name
         array('None\b', 'bp', '!pop'),
         // sadly, in "raise x from y" y will be highlighted as namespace too
-        array('[a-zA-Z_.][w.]*', 'nn'),
+        array('[a-zA-Z_.][\w.]*', 'nn'),
         array('', null, '!pop'),
       )),
 
       'import' => array_merge($nonsemantic_rules, array(
         array('as\b', 'kn'),
         array(',', 'o'),
-        array('[a-zA-Z_.][w.]*', 'nn'),
+        array('[a-zA-Z_.][\w.]*', 'nn'),
         array('', null, '!pop'),
       )),
 
@@ -310,7 +308,7 @@ final class PhutilPythonFragmentLexer extends PhutilLexer {
       'tsqs_raw' => $tsqs,
       'tdqs' => array_merge($stringescape, $tdqs),
       'tsqs' => array_merge($stringescape, $tsqs),
-
     );
   }
+
 }

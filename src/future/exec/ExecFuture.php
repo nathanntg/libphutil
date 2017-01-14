@@ -18,14 +18,12 @@
  * @task info     Command Information
  * @task interact Interacting With Commands
  * @task internal Internals
- * @group exec
  */
-final class ExecFuture extends Future {
+final class ExecFuture extends PhutilExecutableFuture {
 
   private $pipes        = array();
   private $proc         = null;
   private $start        = null;
-  private $timeout      = null;
   private $procStatus   = null;
 
   private $stdout       = null;
@@ -36,8 +34,6 @@ final class ExecFuture extends Future {
   private $stdoutPos    = 0;
   private $stderrPos    = 0;
   private $command      = null;
-  private $env          = null;
-  private $cwd;
 
   private $readBufferSize;
   private $stdoutSizeLimit = PHP_INT_MAX;
@@ -45,6 +41,14 @@ final class ExecFuture extends Future {
 
   private $profilerCallID;
   private $killedByTimeout;
+
+  private $useWindowsFileStreams = false;
+  private $windowsStdoutTempFile = null;
+  private $windowsStderrTempFile = null;
+
+  private $terminateTimeout;
+  private $didTerminate;
+  private $killTimeout;
 
   private static $descriptorSpec = array(
     0 => array('pipe', 'r'),  // stdin
@@ -61,7 +65,7 @@ final class ExecFuture extends Future {
    *
    *   $future = new ExecFuture('wc -l %s', $file_path);
    *
-   * @param string  ##sprintf()##-style command string which will be passed
+   * @param string  `sprintf()`-style command string which will be passed
    *                through @{function:csprintf} with the rest of the arguments.
    * @param ...     Zero or more additional arguments for @{function:csprintf}.
    * @return ExecFuture ExecFuture for running the specified command.
@@ -165,8 +169,8 @@ final class ExecFuture extends Future {
    * NOTE: If you @{method:resolve} a future with a read buffer limit, you may
    * block forever!
    *
-   * TODO: We should probably release the read buffer limit during `resolve()`,
-   * or otherwise detect this. For now, be careful.
+   * TODO: We should probably release the read buffer limit during
+   * @{method:resolve}, or otherwise detect this. For now, be careful.
    *
    * @param int|null Maximum buffer size, or `null` for unlimited.
    * @return this
@@ -178,54 +182,16 @@ final class ExecFuture extends Future {
 
 
   /**
-   * Set the current working directory to use when executing the command.
+   * Set whether to use non-blocking streams on Windows.
    *
-   * @param string Directory to set as CWD before executing the command.
+   * @param bool Whether to use non-blocking streams.
    * @return this
    * @task config
    */
-  public function setCWD($cwd) {
-    $this->cwd = $cwd;
-    return $this;
-  }
-
-
-  /**
-   * Set the environment variables to use when executing the command.
-   *
-   * @param array Environment variables to use when executing the command.
-   * @return this
-   * @task config
-   */
-  public function setEnv($env, $wipe_process_env = false) {
-    if ($wipe_process_env) {
-      $this->env = $env;
-    } else {
-      $this->env = $env + $_ENV;
+  public function setUseWindowsFileStreams($use_streams) {
+    if (phutil_is_windows()) {
+      $this->useWindowsFileStreams = $use_streams;
     }
-    return $this;
-  }
-
-
-  /**
-   * Set the value of a specific environmental variable for this command.
-   *
-   * @param string Environmental variable name.
-   * @param string|null New value, or null to remove this variable.
-   * @return this
-   * @task config
-   */
-  public function updateEnv($key, $value) {
-    if (!is_array($this->env)) {
-      $this->env = $_ENV;
-    }
-
-    if ($value === null) {
-      unset($this->env[$key]);
-    } else {
-      $this->env[$key] = $value;
-    }
-
     return $this;
   }
 
@@ -322,7 +288,7 @@ final class ExecFuture extends Future {
    *   } while ($done === null);
    *
    * Conceivably you might also need to do this if you're writing a client using
-   * ExecFuture and ##netcat##, but you probably should not do that.
+   * @{class:ExecFuture} and `netcat`, but you probably should not do that.
    *
    * NOTE: This completely discards the data. It won't be available when the
    * future resolves. This is almost certainly only useful if you need the
@@ -363,15 +329,20 @@ final class ExecFuture extends Future {
 
   /**
    * Set a hard limit on execution time. If the command runs longer, it will
-   * be killed and the future will resolve with an error code. You can test
+   * be terminated and the future will resolve with an error code. You can test
    * if a future was killed by a timeout with @{method:getWasKilledByTimeout}.
    *
-   * @param int Maximum number of seconds this command may execute for.
+   * The subprocess will be sent a `TERM` signal, and then a `KILL` signal a
+   * short while later if it fails to exit.
+   *
+   * @param int Maximum number of seconds this command may execute for before
+   *  it is signaled.
    * @return this
    * @task config
    */
   public function setTimeout($seconds) {
-    $this->timeout = $seconds;
+    $this->terminateTimeout = $seconds;
+    $this->killTimeout = $seconds + min($seconds, 60);
     return $this;
   }
 
@@ -396,7 +367,7 @@ final class ExecFuture extends Future {
     if ($err) {
       $cmd = $this->command;
       throw new CommandException(
-        "Command failed with error #{$err}!",
+        pht('Command failed with error #%d!', $err),
         $cmd,
         $err,
         $stdout,
@@ -421,25 +392,29 @@ final class ExecFuture extends Future {
     if (strlen($stderr)) {
       $cmd = $this->command;
       throw new CommandException(
-        "JSON command '{$cmd}' emitted text to stderr when none was expected: ".
-        $stderr,
+        pht(
+          "JSON command '%s' emitted text to stderr when none was expected: %d",
+          $cmd,
+          $stderr),
         $cmd,
         0,
         $stdout,
         $stderr);
     }
-    $object = json_decode($stdout, true);
-    if (!is_array($object)) {
+    try {
+      return phutil_json_decode($stdout);
+    } catch (PhutilJSONParserException $ex) {
       $cmd = $this->command;
       throw new CommandException(
-        "JSON command '{$cmd}' did not produce a valid JSON object on stdout: ".
-        $stdout,
+        pht(
+          "JSON command '%s' did not produce a valid JSON object on stdout: %s",
+          $cmd,
+          $stdout),
         $cmd,
         0,
         $stdout,
         $stderr);
     }
-    return $object;
   }
 
   /**
@@ -450,17 +425,14 @@ final class ExecFuture extends Future {
    */
   public function resolveKill() {
     if (!$this->result) {
-      if (defined('SIGKILL')) {
-        $signal = SIGKILL;
-      } else {
-        $signal = 9;
-      }
-
+      $signal = 9;
       proc_terminate($this->proc, $signal);
+
       $this->result = array(
         128 + $signal,
         $this->stdout,
-        $this->stderr);
+        $this->stderr,
+      );
       $this->closeProcess();
     }
 
@@ -566,7 +538,7 @@ final class ExecFuture extends Future {
     do {
       $data = fread($stream, min($length, 64 * 1024));
       if (false === $data) {
-        throw new Exception('Failed to read from '.$description);
+        throw new Exception(pht('Failed to read from %s', $description));
       }
 
       $read_bytes = strlen($data);
@@ -596,7 +568,7 @@ final class ExecFuture extends Future {
    */
   public function isReady() {
     // NOTE: We have soft dependencies on PhutilServiceProfiler and
-    // PhutilErrorTrap here. These depencies are soft to avoid the need to
+    // PhutilErrorTrap here. These dependencies are soft to avoid the need to
     // build them into the Phage agent. Under normal circumstances, these
     // classes are always available.
 
@@ -613,7 +585,7 @@ final class ExecFuture extends Future {
       }
 
       if (!$this->start) {
-        // We might already have started the timer via initating resolution.
+        // We might already have started the timer via initiating resolution.
         $this->start = microtime(true);
       }
 
@@ -628,13 +600,21 @@ final class ExecFuture extends Future {
         // See T4395. proc_open under Windows uses "cmd /C [cmd]", which will
         // strip the first and last quote when there aren't exactly two quotes
         // (and some other conditions as well). This results in a command that
-        // looks like `command" "path to my file" "something someting` which is
+        // looks like `command" "path to my file" "something something` which is
         // clearly wrong. By surrounding the command string with quotes we can
         // be sure this process is harmless.
         if (strpos($unmasked_command, '"') !== false) {
           $unmasked_command = '"'.$unmasked_command.'"';
         }
       }
+
+      if ($this->hasEnv()) {
+        $env = $this->getEnv();
+      } else {
+        $env = null;
+      }
+
+      $cwd = $this->getCWD();
 
       // NOTE: See note above about Phage.
       if (class_exists('PhutilErrorTrap')) {
@@ -643,12 +623,46 @@ final class ExecFuture extends Future {
         $trap = null;
       }
 
+      $spec = self::$descriptorSpec;
+      if ($this->useWindowsFileStreams) {
+        $this->windowsStdoutTempFile = new TempFile();
+        $this->windowsStderrTempFile = new TempFile();
+
+        $spec = array(
+          0 => self::$descriptorSpec[0],  // stdin
+          1 => fopen($this->windowsStdoutTempFile, 'wb'),  // stdout
+          2 => fopen($this->windowsStderrTempFile, 'wb'),  // stderr
+        );
+
+        if (!$spec[1] || !$spec[2]) {
+          throw new Exception(pht(
+            'Unable to create temporary files for '.
+            'Windows stdout / stderr streams'));
+        }
+      }
+
       $proc = @proc_open(
         $unmasked_command,
-        self::$descriptorSpec,
+        $spec,
         $pipes,
-        $this->cwd,
-        $this->env);
+        $cwd,
+        $env);
+
+      if ($this->useWindowsFileStreams) {
+        fclose($spec[1]);
+        fclose($spec[2]);
+        $pipes = array(
+          0 => head($pipes),  // stdin
+          1 => fopen($this->windowsStdoutTempFile, 'rb'),  // stdout
+          2 => fopen($this->windowsStderrTempFile, 'rb'),  // stderr
+        );
+
+        if (!$pipes[1] || !$pipes[2]) {
+          throw new Exception(pht(
+            'Unable to open temporary files for '.
+            'reading Windows stdout / stderr streams'));
+        }
+      }
 
       if ($trap) {
         $err = $trap->getErrorsAsString();
@@ -658,7 +672,11 @@ final class ExecFuture extends Future {
       }
 
       if (!is_resource($proc)) {
-        throw new Exception("Failed to proc_open(): {$err}");
+        throw new Exception(
+          pht(
+            'Failed to `%s`: %s',
+            'proc_open()',
+            $err));
       }
 
       $this->pipes = $pipes;
@@ -668,15 +686,15 @@ final class ExecFuture extends Future {
 
       if (!phutil_is_windows()) {
 
-        // On Windows, there's no such thing as nonblocking interprocess I/O.
-        // Just leave the sockets blocking and hope for the best. Some features
-        // will not work.
+        // On Windows, we redirect process standard output and standard error
+        // through temporary files, and then use stream_select to determine
+        // if there's more data to read.
 
         if ((!stream_set_blocking($stdout, false)) ||
             (!stream_set_blocking($stderr, false)) ||
             (!stream_set_blocking($stdin,  false))) {
           $this->__destruct();
-          throw new Exception('Failed to set streams nonblocking.');
+          throw new Exception(pht('Failed to set streams nonblocking.'));
         }
       }
 
@@ -696,7 +714,7 @@ final class ExecFuture extends Future {
 
       $bytes = fwrite($stdin, $write_segment);
       if ($bytes === false) {
-        throw new Exception('Unable to write to stdin!');
+        throw new Exception(pht('Unable to write to stdin!'));
       } else if ($bytes) {
         $this->stdin->removeBytesFromHead($bytes);
       } else {
@@ -736,9 +754,35 @@ final class ExecFuture extends Future {
         $max_stderr_read_bytes);
     }
 
+    $is_done = false;
     if (!$status['running']) {
+      // We may still have unread bytes on stdout or stderr, particularly if
+      // this future is being buffered and streamed. If we do, we don't want to
+      // consider the subprocess to have exited until we've read everything.
+      // See T9724 for context.
+      if (feof($stdout) && feof($stderr)) {
+        $is_done = true;
+      }
+    }
+
+    if ($is_done) {
+      if ($this->useWindowsFileStreams) {
+        fclose($stdout);
+        fclose($stderr);
+      }
+
+      // If the subprocess got nuked with `kill -9`, we get a -1 exitcode.
+      // Upgrade this to a slightly more informative value by examining the
+      // terminating signal code.
+      $err = $status['exitcode'];
+      if ($err == -1) {
+        if ($status['signaled']) {
+          $err = 128 + $status['termsig'];
+        }
+      }
+
       $this->result = array(
-        $status['exitcode'],
+        $err,
         $this->stdout,
         $this->stderr,
       );
@@ -747,7 +791,16 @@ final class ExecFuture extends Future {
     }
 
     $elapsed = (microtime(true) - $this->start);
-    if ($this->timeout && ($elapsed >= $this->timeout)) {
+
+    if ($this->terminateTimeout && ($elapsed >= $this->terminateTimeout)) {
+      if (!$this->didTerminate) {
+        $this->killedByTimeout = true;
+        $this->sendTerminateSignal();
+        return false;
+      }
+    }
+
+    if ($this->killTimeout && ($elapsed >= $this->killTimeout)) {
       $this->killedByTimeout = true;
       $this->resolveKill();
       return true;
@@ -770,7 +823,10 @@ final class ExecFuture extends Future {
 
     $status = $this->procGetStatus();
     if ($status['running']) {
-      $this->resolveKill();
+      $this->sendTerminateSignal();
+      if (!$this->waitForExit(5)) {
+        $this->resolveKill();
+      }
     } else {
       $this->closeProcess();
     }
@@ -809,7 +865,7 @@ final class ExecFuture extends Future {
 
 
   /**
-   * Execute proc_get_status(), but avoid pitfalls.
+   * Execute `proc_get_status()`, but avoid pitfalls.
    *
    * @return dict Process status.
    * @task internal
@@ -824,6 +880,7 @@ final class ExecFuture extends Future {
       }
     }
     $this->procStatus = proc_get_status($this->proc);
+
     return $this->procStatus;
   }
 
@@ -860,16 +917,46 @@ final class ExecFuture extends Future {
   public function getDefaultWait() {
     $wait = parent::getDefaultWait();
 
-    if ($this->timeout) {
+    $next_timeout = $this->getNextTimeout();
+    if ($next_timeout) {
       if (!$this->start) {
         $this->start = microtime(true);
       }
       $elapsed = (microtime(true) - $this->start);
-      $wait = max(0, min($this->timeout - $elapsed, $wait));
+      $wait = max(0, min($next_timeout - $elapsed, $wait));
     }
 
     return $wait;
   }
 
+  private function getNextTimeout() {
+    if ($this->didTerminate) {
+      return $this->killTimeout;
+    } else {
+      return $this->terminateTimeout;
+    }
+  }
+
+  private function sendTerminateSignal() {
+    $this->didTerminate = true;
+    proc_terminate($this->proc);
+    return $this;
+  }
+
+  private function waitForExit($duration) {
+    $start = microtime(true);
+
+    while (true) {
+      $status = $this->procGetStatus();
+      if (!$status['running']) {
+        return true;
+      }
+
+      $waited = (microtime(true) - $start);
+      if ($waited > $duration) {
+        return false;
+      }
+    }
+  }
 
 }

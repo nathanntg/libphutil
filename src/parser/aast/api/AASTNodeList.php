@@ -1,88 +1,22 @@
 <?php
 
-/**
- * @group aast
- */
-final class AASTNodeList implements Iterator, Countable {
+final class AASTNodeList
+  extends Phobject
+  implements Countable, Iterator {
 
   protected $list;
   protected $tree;
   protected $ids;
   protected $pos;
 
-  public function count() {
-    return count($this->ids);
-  }
-
-  public function current() {
-    return $this->list[$this->key()];
-  }
-
-  public function rewind() {
-    $this->pos = 0;
-  }
-
-  public function valid() {
-    return $this->pos < count($this->ids);
-  }
-
-  public function next() {
-    $this->pos++;
-  }
-
-  public function key() {
-    return $this->ids[$this->pos];
-  }
-
-  public static function newFromTreeAndNodes(AASTTree $tree, array $nodes) {
-    assert_instances_of($nodes, 'AASTNode');
-    $obj = new AASTNodeList();
-    $obj->tree = $tree;
-    $obj->list = $nodes;
-    $obj->ids  = array_keys($nodes);
-    return $obj;
-  }
-
-  public static function newFromTree(AASTTree $tree) {
-    $obj = new AASTNodeList();
-    $obj->tree = $tree;
-    $obj->list = array(0 => $tree->getRootNode());
-    $obj->ids = array(0 => 0);
-    return $obj;
-  }
-
-  protected function __construct() {
-
-  }
-
-  public function getDescription() {
-    if (empty($this->list)) {
-      return 'an empty node list';
-    }
-
-    $desc = array();
-    $desc[] = 'a list of '.count($this->list).' nodes:';
-    foreach ($this->list as $node) {
-      $desc[] = '  '.$node->getDescription().';';
-    }
-
-    return implode("\n", $desc);
-  }
-
-
+  protected function __construct() {}
 
   protected function newList(array $nodes) {
-    return AASTNodeList::newFromTreeAndNodes(
-      $this->tree,
-      $nodes);
+    return self::newFromTreeAndNodes($this->tree, $nodes);
   }
 
   public function selectDescendantsOfType($type_name) {
-    $results = array();
-    foreach ($this->list as $id => $node) {
-      $results += $node->selectDescendantsOfType($type_name)->getRawNodes();
-    }
-    return $this->newList($results);
+    return $this->selectDescendantsOfTypes(array($type_name));
   }
 
   public function selectDescendantsOfTypes(array $type_names) {
@@ -112,19 +46,6 @@ final class AASTNodeList implements Iterator, Countable {
     return $this;
   }
 
-
-  protected function executeSelectDescendantsOfType($node, $type) {
-    $results = array();
-    foreach ($node->getChildren() as $id => $child) {
-      if ($child->getTypeID() == $type) {
-        $results[$id] = $child;
-      } else {
-        $results += $this->executeSelectDescendantsOfType($child, $type);
-      }
-    }
-    return $results;
-  }
-
   public function getTokens() {
     $tokens = array();
     foreach ($this->list as $node) {
@@ -135,6 +56,55 @@ final class AASTNodeList implements Iterator, Countable {
 
   public function getRawNodes() {
     return $this->list;
+  }
+
+  public static function newFromTreeAndNodes(AASTTree $tree, array $nodes) {
+    // We could do `assert_instances_of($nodes, 'AASTNode')` here, but doing
+    // so imposes an observable performance penalty for linting.
+
+    $obj = new AASTNodeList();
+    $obj->tree = $tree;
+    $obj->list = $nodes;
+    $obj->ids  = array_keys($nodes);
+    return $obj;
+  }
+
+  public static function newFromTree(AASTTree $tree) {
+    $obj = new AASTNodeList();
+    $obj->tree = $tree;
+    $obj->list = array(0 => $tree->getRootNode());
+    $obj->ids = array(0 => 0);
+    return $obj;
+  }
+
+
+/* -(  Countable  )---------------------------------------------------------- */
+
+  public function count() {
+    return count($this->ids);
+  }
+
+
+/* -(  Iterator  )----------------------------------------------------------- */
+
+  public function current() {
+    return $this->list[$this->key()];
+  }
+
+  public function key() {
+    return $this->ids[$this->pos];
+  }
+
+  public function next() {
+    $this->pos++;
+  }
+
+  public function rewind() {
+    $this->pos = 0;
+  }
+
+  public function valid() {
+    return $this->pos < count($this->ids);
   }
 
 }

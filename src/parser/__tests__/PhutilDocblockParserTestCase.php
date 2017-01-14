@@ -2,8 +2,6 @@
 
 /**
  * Test cases for @{class:PhutilDocblockParser}.
- *
- * @group testcase
  */
 final class PhutilDocblockParserTestCase extends PhutilTestCase {
 
@@ -54,7 +52,8 @@ final class PhutilDocblockParserTestCase extends PhutilTestCase {
       case 'multi-specials.docblock':
         $this->assertEqual(
           array(
-            'special' => "north\nsouth",
+            'special' => array('north', 'south'),
+            'stable' => true,
           ),
           $specials);
         $this->assertEqual(
@@ -66,6 +65,7 @@ final class PhutilDocblockParserTestCase extends PhutilTestCase {
           array(
             'type' => 'type',
             'task' => 'task',
+            'special' => array('dot', 'dot', 'dash'),
           ),
           $specials);
         $this->assertEqual(
@@ -85,7 +85,7 @@ final class PhutilDocblockParserTestCase extends PhutilTestCase {
       case 'specials-with-hyphen.docblock':
         $this->assertEqual(
           array(
-            'repeat-hyphen'     => "a\nb",
+            'repeat-hyphen'     => array('a', 'b'),
             'multiline-hyphen'  => 'mmm nnn',
             'normal-hyphen'     => 'x',
           ),
@@ -112,8 +112,16 @@ final class PhutilDocblockParserTestCase extends PhutilTestCase {
           ),
           $specials);
         break;
+      case 'mixed-types.docblock':
+        $this->assertEqual(
+          array(
+            'special' => array('squirrels', true),
+          ),
+          $specials);
+        break;
       default:
-        throw new Exception("No test case to handle file '{$file}'!");
+        throw new Exception(pht("No test case to handle file '%s'!", $file));
     }
   }
+
 }

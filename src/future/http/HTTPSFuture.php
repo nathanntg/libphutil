@@ -2,8 +2,6 @@
 
 /**
  * Very basic HTTPS future.
- *
- * @group futures
  */
 final class HTTPSFuture extends BaseHTTPFuture {
 
@@ -11,7 +9,6 @@ final class HTTPSFuture extends BaseHTTPFuture {
   private static $results = array();
   private static $pool = array();
   private static $globalCABundle;
-  private static $blindTrustDomains = array();
 
   private $handle;
   private $profilerCallID;
@@ -21,6 +18,9 @@ final class HTTPSFuture extends BaseHTTPFuture {
   private $responseBufferPos;
   private $files = array();
   private $temporaryFiles = array();
+  private $rawBody;
+  private $rawBodyPos = 0;
+  private $fileHandle;
 
   /**
    * Create a temp file containing an SSL cert, and use it for this session.
@@ -117,19 +117,8 @@ final class HTTPSFuture extends BaseHTTPFuture {
   }
 
   /**
-   * Set a list of domains to blindly trust. Certificates for these domains
-   * will not be validated.
-   *
-   * @param list<string> List of domain names to trust blindly.
-   * @return void
-   */
-  public static function setBlindlyTrustDomains(array $domains) {
-    self::$blindTrustDomains = array_fuse($domains);
-  }
-
-  /**
    * Load contents of remote URI. Behaves pretty much like
-   *  `@file_get_contents($uri)` but doesn't require `allow_url_fopen`.
+   * `@file_get_contents($uri)` but doesn't require `allow_url_fopen`.
    *
    * @param string
    * @param float
@@ -161,9 +150,10 @@ final class HTTPSFuture extends BaseHTTPFuture {
     if (isset($this->files[$key])) {
       throw new Exception(
         pht(
-          'HTTPSFuture currently supports only one file attachment for each '.
+          '%s currently supports only one file attachment for each '.
           'parameter name. You are trying to attach two different files with '.
           'the same parameter, "%s".',
+          __CLASS__,
           $key));
     }
 
@@ -185,17 +175,21 @@ final class HTTPSFuture extends BaseHTTPFuture {
     $domain = id(new PhutilURI($uri))->getDomain();
 
     if (!$this->handle) {
+      $uri_object = new PhutilURI($uri);
+      $proxy = PhutilHTTPEngineExtension::buildHTTPProxyURI($uri_object);
+
       $profiler = PhutilServiceProfiler::getInstance();
       $this->profilerCallID = $profiler->beginServiceCall(
         array(
           'type' => 'http',
           'uri' => $uri,
+          'proxy' => (string)$proxy,
         ));
 
       if (!self::$multi) {
         self::$multi = curl_multi_init();
         if (!self::$multi) {
-          throw new Exception('curl_multi_init() failed!');
+          throw new Exception(pht('%s failed!', 'curl_multi_init()'));
         }
       }
 
@@ -204,7 +198,7 @@ final class HTTPSFuture extends BaseHTTPFuture {
       } else {
         $curl = curl_init();
         if (!$curl) {
-          throw new Exception('curl_init() failed!');
+          throw new Exception(pht('%s failed!', 'curl_init()'));
         }
       }
 
@@ -227,8 +221,32 @@ final class HTTPSFuture extends BaseHTTPFuture {
         curl_setopt($curl, CURLOPT_REDIR_PROTOCOLS, $allowed_protocols);
       }
 
-      $data = $this->formatRequestDataForCURL();
-      curl_setopt($curl, CURLOPT_POSTFIELDS, $data);
+      if (strlen($this->rawBody)) {
+        if ($this->getData()) {
+          throw new Exception(
+            pht(
+              'You can not execute an HTTP future with both a raw request '.
+              'body and structured request data.'));
+        }
+
+        // We aren't actually going to use this file handle, since we are
+        // just pushing data through the callback, but cURL gets upset if
+        // we don't hand it a real file handle.
+        $tmp = new TempFile();
+        $this->fileHandle = fopen($tmp, 'r');
+
+        // NOTE: We must set CURLOPT_PUT here to make cURL use CURLOPT_INFILE.
+        // We'll possibly overwrite the method later on, unless this is really
+        // a PUT request.
+        curl_setopt($curl, CURLOPT_PUT, true);
+        curl_setopt($curl, CURLOPT_INFILE, $this->fileHandle);
+        curl_setopt($curl, CURLOPT_INFILESIZE, strlen($this->rawBody));
+        curl_setopt($curl, CURLOPT_READFUNCTION,
+          array($this, 'willWriteBody'));
+      } else {
+        $data = $this->formatRequestDataForCURL();
+        curl_setopt($curl, CURLOPT_POSTFIELDS, $data);
+      }
 
       $headers = $this->getHeaders();
 
@@ -280,8 +298,15 @@ final class HTTPSFuture extends BaseHTTPFuture {
         curl_setopt($curl, CURLOPT_TIMEOUT, $timeout);
       }
 
+      // We're going to try to set CAINFO below. This doesn't work at all on
+      // OSX around Yosemite (see T5913). On these systems, we'll use the
+      // system CA and then try to tell the user that their settings were
+      // ignored and how to fix things if we encounter a CA-related error.
+      // Assume we have custom CA settings to start with; we'll clear this
+      // flag if we read the default CA info below.
+
       // Try some decent fallbacks here:
-      // - First, check if a bundle is set explicit for this request, via
+      // - First, check if a bundle is set explicitly for this request, via
       //   `setCABundle()` or similar.
       // - Then, check if a global bundle is set explicitly for all requests,
       //   via `setGlobalCABundle()` or similar.
@@ -310,17 +335,30 @@ final class HTTPSFuture extends BaseHTTPFuture {
         }
       }
 
-      curl_setopt($curl, CURLOPT_CAINFO, $this->getCABundle());
-
-      $domain = id(new PhutilURI($uri))->getDomain();
-      if (!empty(self::$blindTrustDomains[$domain])) {
-        // Disable peer verification for domains that we blindly trust.
-        curl_setopt($curl, CURLOPT_SSL_VERIFYPEER, false);
-      } else {
-        curl_setopt($curl, CURLOPT_SSL_VERIFYPEER, true);
+      if ($this->canSetCAInfo()) {
+        curl_setopt($curl, CURLOPT_CAINFO, $this->getCABundle());
       }
 
+      $verify_peer = 1;
+      $verify_host = 2;
+
+      $extensions = PhutilHTTPEngineExtension::getAllExtensions();
+      foreach ($extensions as $extension) {
+        if ($extension->shouldTrustAnySSLAuthorityForURI($uri_object)) {
+          $verify_peer = 0;
+        }
+        if ($extension->shouldTrustAnySSLHostnameForURI($uri_object)) {
+          $verify_host = 0;
+        }
+      }
+
+      curl_setopt($curl, CURLOPT_SSL_VERIFYPEER, $verify_peer);
+      curl_setopt($curl, CURLOPT_SSL_VERIFYHOST, $verify_host);
       curl_setopt($curl, CURLOPT_SSLVERSION, 0);
+
+      if ($proxy) {
+        curl_setopt($curl, CURLOPT_PROXY, (string)$proxy);
+      }
     } else {
       $curl = $this->handle;
 
@@ -362,7 +400,14 @@ final class HTTPSFuture extends BaseHTTPFuture {
     $err_code = $info['result'];
 
     if ($err_code) {
-      $status = new HTTPFutureResponseStatusCURL($err_code, $uri);
+      if (($err_code == CURLE_SSL_CACERT) && !$this->canSetCAInfo()) {
+        $status = new HTTPFutureCertificateResponseStatus(
+          HTTPFutureCertificateResponseStatus::ERROR_IMMUTABLE_CERTIFICATES,
+          $uri);
+      } else {
+        $status = new HTTPFutureCURLResponseStatus($err_code, $uri);
+      }
+
       $body = null;
       $headers = array();
       $this->result = array($status, $body, $headers);
@@ -378,7 +423,9 @@ final class HTTPSFuture extends BaseHTTPFuture {
 
     // NOTE: We want to use keepalive if possible. Return the handle to a
     // pool for the domain; don't close it.
-    self::$pool[$domain][] = $curl;
+    if ($this->shouldReuseHandles()) {
+      self::$pool[$domain][] = $curl;
+    }
 
     $profiler = PhutilServiceProfiler::getInstance();
     $profiler->endServiceCall($this->profilerCallID, array());
@@ -502,7 +549,8 @@ final class HTTPSFuture extends BaseHTTPFuture {
             pht(
               'Request specifies two values for key "%s", but parameter '.
               'names must be unique if you are posting file data due to '.
-              'limitations with cURL.'));
+              'limitations with cURL.',
+              $key));
         }
         $map[$key] = $value;
       }
@@ -518,10 +566,10 @@ final class HTTPSFuture extends BaseHTTPFuture {
       if (array_key_exists($name, $data)) {
         throw new Exception(
           pht(
-            'Request specifies a file with key "%s", but that key is '.
-            'also defined by normal request data. Due to limitations '.
-            'with cURL, requests that post file data must use unique '.
-            'keys.'));
+            'Request specifies a file with key "%s", but that key is also '.
+            'defined by normal request data. Due to limitations with cURL, '.
+            'requests that post file data must use unique keys.',
+            $name));
       }
 
       $tmp = new TempFile($info['name']);
@@ -531,7 +579,7 @@ final class HTTPSFuture extends BaseHTTPFuture {
       // In 5.5.0 and later, we can use CURLFile. Prior to that, we have to
       // use this "@" stuff.
 
-      if (class_exists('CURLFile')) {
+      if (class_exists('CURLFile', false)) {
         $file_value = new CURLFile((string)$tmp, $info['mime'], $info['name']);
       } else {
         $file_value = '@'.(string)$tmp;
@@ -562,9 +610,11 @@ final class HTTPSFuture extends BaseHTTPFuture {
         throw new Exception(
           pht(
             'Attempting to make an HTTP request, but query string data begins '.
-            'with "@". Prior to PHP 5.2.0 this reads files off disk, which '.
+            'with "%s". Prior to PHP 5.2.0 this reads files off disk, which '.
             'creates a wide attack window for security vulnerabilities. '.
-            'Upgrade PHP or avoid making cURL requests which begin with "@".'));
+            'Upgrade PHP or avoid making cURL requests which begin with "%s".',
+            '@',
+            '@'));
       }
 
       // This is safe if we're on PHP 5.2.0 or newer.
@@ -573,11 +623,67 @@ final class HTTPSFuture extends BaseHTTPFuture {
 
     throw new Exception(
       pht(
-        'Attempting to make an HTTP request which includes file data, but '.
-        'the value of a query parameter begins with "@". PHP interprets '.
-        'these values to mean that it should read arbitrary files off disk '.
-        'and transmit them to remote servers. Declining to make this '.
-        'request.'));
+        'Attempting to make an HTTP request which includes file data, but the '.
+        'value of a query parameter begins with "%s". PHP interprets these '.
+        'values to mean that it should read arbitrary files off disk and '.
+        'transmit them to remote servers. Declining to make this request.',
+        '@'));
   }
+
+
+  /**
+   * Determine whether CURLOPT_CAINFO is usable on this system.
+   */
+  private function canSetCAInfo() {
+    // We cannot set CAInfo on OSX after Yosemite.
+
+    $osx_version = PhutilExecutionEnvironment::getOSXVersion();
+    if ($osx_version) {
+      if (version_compare($osx_version, 14, '>=')) {
+        return false;
+      }
+    }
+
+    return true;
+  }
+
+
+  /**
+   * Write a raw HTTP body into the request.
+   *
+   * You must write the entire body before starting the request.
+   *
+   * @param string Raw body.
+   * @return this
+   */
+  public function write($raw_body) {
+    $this->rawBody = $raw_body;
+    return $this;
+  }
+
+
+  /**
+   * Callback to pass data to cURL.
+   */
+  public function willWriteBody($handle, $infile, $len) {
+    $bytes = substr($this->rawBody, $this->rawBodyPos, $len);
+    $this->rawBodyPos += $len;
+    return $bytes;
+  }
+
+  private function shouldReuseHandles() {
+    $curl_version = curl_version();
+    $version = idx($curl_version, 'version');
+
+    // NOTE: cURL 7.43.0 has a bug where the POST body length is not recomputed
+    // properly when a handle is reused. For this version of cURL, disable
+    // handle reuse and accept a small performance penalty. See T8654.
+    if ($version == '7.43.0') {
+      return false;
+    }
+
+    return true;
+  }
+
 
 }

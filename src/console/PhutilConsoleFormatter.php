@@ -1,9 +1,6 @@
 <?php
 
-/**
- * @group console
- */
-final class PhutilConsoleFormatter {
+final class PhutilConsoleFormatter extends Phobject {
 
   private static $colorCodes = array(
     'black'   => 0,
@@ -26,7 +23,14 @@ final class PhutilConsoleFormatter {
   public static function getDisableANSI() {
     if (self::$disableANSI === null) {
       $term = phutil_utf8_strtolower(getenv('TERM'));
+      // ansicon enables ANSI support on Windows
+      if (!$term && getenv('ANSICON')) {
+        $term = 'ansi';
+      }
+
       if (phutil_is_windows() && $term !== 'cygwin' && $term !== 'ansi') {
+        self::$disableANSI = true;
+      } else if (!defined('STDOUT')) {
         self::$disableANSI = true;
       } else if (function_exists('posix_isatty') && !posix_isatty(STDOUT)) {
         self::$disableANSI = true;
@@ -38,6 +42,24 @@ final class PhutilConsoleFormatter {
   }
 
   public static function formatString($format /* ... */) {
+    $args = func_get_args();
+    $args[0] = self::interpretFormat($args[0]);
+    return call_user_func_array('sprintf', $args);
+  }
+
+  public static function replaceColorCode($matches) {
+    $codes = self::$colorCodes;
+    $offset = 30 + $codes[$matches[2]];
+    $default = 39;
+    if ($matches[1] == 'bg') {
+      $offset += 10;
+      $default += 10;
+    }
+
+    return chr(27).'['.$offset.'m'.$matches[3].chr(27).'['.$default.'m';
+  }
+
+  public static function interpretFormat($format) {
     $colors = implode('|', array_keys(self::$colorCodes));
 
     // Sequence should be preceded by start-of-string or non-backslash
@@ -65,29 +87,12 @@ final class PhutilConsoleFormatter {
       $format = preg_replace($invert_re,    $invert,    $format);
       $format = preg_replace_callback(
         '@<(fg|bg):('.$colors.')>(.*)</\1>@sU',
-        array('PhutilConsoleFormatter', 'replaceColorCode'),
+        array(__CLASS__, 'replaceColorCode'),
         $format);
     }
 
     // Remove backslash escaping
-    $format = preg_replace('/\\\\(\*\*.*\*\*|__.*__|##.*##)/sU', '\1', $format);
-
-    $args = func_get_args();
-    $args[0] = $format;
-
-    return call_user_func_array('sprintf', $args);
-  }
-
-  public static function replaceColorCode($matches) {
-    $codes = self::$colorCodes;
-    $offset = 30 + $codes[$matches[2]];
-    $default = 39;
-    if ($matches[1] == 'bg') {
-      $offset += 10;
-      $default += 10;
-    }
-
-    return chr(27).'['.$offset.'m'.$matches[3].chr(27).'['.$default.'m';
+    return preg_replace('/\\\\(\*\*.*\*\*|__.*__|##.*##)/sU', '\1', $format);
   }
 
 }

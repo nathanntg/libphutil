@@ -27,14 +27,11 @@
  * @task disable  Disabling Protection
  * @task manage   Managing Write Guards
  * @task internal Internals
- *
- * @group aphront
  */
-final class AphrontWriteGuard {
+final class AphrontWriteGuard extends Phobject {
 
   private static $instance;
   private static $allowUnguardedWrites = false;
-  private static $abruptExitlistenerIsInstalled = false;
 
   private $callback;
   private $allowDepth = 0;
@@ -67,19 +64,18 @@ final class AphrontWriteGuard {
   public function __construct($callback) {
     if (self::$instance) {
       throw new Exception(
-        'An AphrontWriteGuard already exists. Dispose of the previous guard '.
-        'before creating a new one.');
+        pht(
+          'An %s already exists. Dispose of the previous guard '.
+          'before creating a new one.',
+          __CLASS__));
     }
     if (self::$allowUnguardedWrites) {
       throw new Exception(
-        'An AphrontWriteGuard is being created in a context which permits '.
-        'unguarded writes unconditionally. This is not allowed and indicates '.
-        'a serious error.');
-    }
-    if (!self::$abruptExitlistenerIsInstalled) {
-      self::$abruptExitlistenerIsInstalled = true;
-      $event_listener = new AphrontWriteGuardExitEventListener();
-      $event_listener->register();
+        pht(
+          'An %s is being created in a context which permits '.
+          'unguarded writes unconditionally. This is not allowed and '.
+          'indicates a serious error.',
+          __CLASS__));
     }
     $this->callback = $callback;
     self::$instance = $this;
@@ -95,25 +91,18 @@ final class AphrontWriteGuard {
    */
   public function dispose() {
     if (!self::$instance) {
-      throw new Exception(
-        'Attempting to dispose of write guard, but no write guard is active!');
+      throw new Exception(pht(
+        'Attempting to dispose of write guard, but no write guard is active!'));
     }
 
     if ($this->allowDepth > 0) {
       throw new Exception(
-        'Imbalanced AphrontWriteGuard: more beginUnguardedWrites() calls than '.
-        'endUnguardedWrites() calls.');
+        pht(
+          'Imbalanced %s: more %s calls than %s calls.',
+          __CLASS__,
+          'beginUnguardedWrites()',
+          'endUnguardedWrites()'));
     }
-    self::$instance = null;
-  }
-
-  /**
-   * This is used for clearing the write guard without performing any checks.
-   * This is used in conjunction with phutil_exit for abrupt exits.
-   *
-   * @return void
-   */
-  public function disposeAbruptly() {
     self::$instance = null;
   }
 
@@ -164,8 +153,9 @@ final class AphrontWriteGuard {
     if (!self::$instance) {
       if (!self::$allowUnguardedWrites) {
         throw new Exception(
-          'Unguarded write! There must be an active AphrontWriteGuard to '.
-          'perform writes.');
+          pht(
+            'Unguarded write! There must be an active %s to perform writes.',
+            __CLASS__));
       } else {
         // Unguarded writes are being allowed unconditionally.
         return;
@@ -239,8 +229,11 @@ final class AphrontWriteGuard {
     }
     if (self::$instance->allowDepth <= 0) {
       throw new Exception(
-        'Imbalanced AphrontWriteGuard: more endUnguardedWrites() calls than '.
-        'beginUnguardedWrites() calls.');
+        pht(
+          'Imbalanced %s: more %s calls than %s calls.',
+          __CLASS__,
+          'endUnguardedWrites()',
+          'beginUnguardedWrites()'));
     }
     self::$instance->allowDepth--;
   }
@@ -261,28 +254,14 @@ final class AphrontWriteGuard {
   public static function allowDangerousUnguardedWrites($allow) {
     if (self::$instance) {
       throw new Exception(
-        'You can not unconditionally disable AphrontWriteGuard by calling '.
-        'allowDangerousUnguardedWrites() while a write guard is active. Use '.
-        'beginUnguardedWrites() to temporarily allow unguarded writes.');
+        pht(
+          'You can not unconditionally disable %s by calling %s while a write '.
+          'guard is active. Use %s to temporarily allow unguarded writes.',
+          __CLASS__,
+          __FUNCTION__.'()',
+          'beginUnguardedWrites()'));
     }
     self::$allowUnguardedWrites = true;
   }
 
-
-/* -(  Internals  )---------------------------------------------------------- */
-
-
-  /**
-   * When the object is destroyed, make sure @{method:dispose} was called.
-   *
-   * @task internal
-   */
-  public function __destruct() {
-    if (isset(self::$instance)) {
-      throw new Exception(
-        'AphrontWriteGuard was not properly disposed of! Call dispose() on '.
-        'every AphrontWriteGuard object you instantiate or use phutil_exit() '.
-        'to exit abruptly while debugging.');
-    }
-  }
 }

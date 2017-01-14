@@ -1,13 +1,10 @@
 <?php
 
-/**
- * @group testcase
- */
 final class PhutilTranslatorTestCase extends PhutilTestCase {
 
   public function testEnglish() {
-    $translator = new PhutilTranslator();
-    $translator->addTranslations(
+    $translator = $this->newTranslator('en_US');
+    $translator->setTranslations(
       array(
         '%d line(s)' => array('%d line', '%d lines'),
         '%d char(s) on %d row(s)' => array(
@@ -34,11 +31,10 @@ final class PhutilTranslatorTestCase extends PhutilTestCase {
   }
 
   public function testSingleVariant() {
-    $translator = new PhutilTranslator();
-    $translator->setLanguage('en');
+    $translator = $this->newTranslator('en_US');
 
     // In this translation, we have no alternatives for the first conversion.
-    $translator->addTranslations(
+    $translator->setTranslations(
       array(
         'Run the command %s %d time(s).' => array(
           array(
@@ -57,9 +53,8 @@ final class PhutilTranslatorTestCase extends PhutilTestCase {
   }
 
   public function testCzech() {
-    $translator = new PhutilTranslator();
-    $translator->setLanguage('cs');
-    $translator->addTranslations(
+    $translator = $this->newTranslator('cs_CZ');
+    $translator->setTranslations(
       array(
         '%d beer(s)' => array('%d pivo', '%d piva', '%d piv'),
       ));
@@ -73,9 +68,8 @@ final class PhutilTranslatorTestCase extends PhutilTestCase {
   }
 
   public function testPerson() {
-    $translator = new PhutilTranslator();
-    $translator->setLanguage('cs');
-    $translator->addTranslations(
+    $translator = $this->newTranslator('cs_CZ');
+    $translator->setTranslations(
       array(
         '%s wrote.' => array('%s napsal.', '%s napsala.'),
       ));
@@ -85,12 +79,12 @@ final class PhutilTranslatorTestCase extends PhutilTestCase {
       'Test () napsal.',
       $translator->translate('%s wrote.', $person));
 
-    $person->setSex(PhutilPerson::SEX_MALE);
+    $person->setGender(PhutilPerson::GENDER_MASCULINE);
     $this->assertEqual(
       'Test (m) napsal.',
       $translator->translate('%s wrote.', $person));
 
-    $person->setSex(PhutilPerson::SEX_FEMALE);
+    $person->setGender(PhutilPerson::GENDER_FEMININE);
     $this->assertEqual(
       'Test (f) napsala.',
       $translator->translate('%s wrote.', $person));
@@ -98,17 +92,17 @@ final class PhutilTranslatorTestCase extends PhutilTestCase {
 
   public function testTranslateDate() {
     $date = new DateTime('2012-06-21');
+    $translator = $this->newTranslator('en_US');
 
-    $translator = new PhutilTranslator();
     $this->assertEqual('June', $translator->translateDate('F', $date));
     $this->assertEqual('June 21', $translator->translateDate('F d', $date));
     $this->assertEqual('F', $translator->translateDate('\F', $date));
 
-    $translator->addTranslations(
+    $translator->setTranslations(
       array(
         'June' => 'correct',
         '21' => 'wrong',
-        'F' => 'wrong'
+        'F' => 'wrong',
       ));
     $this->assertEqual('correct', $translator->translateDate('F', $date));
     $this->assertEqual('correct 21', $translator->translateDate('F d', $date));
@@ -116,12 +110,17 @@ final class PhutilTranslatorTestCase extends PhutilTestCase {
   }
 
   public function testSetInstance() {
-    PhutilTranslator::setInstance(new PhutilTranslator());
+    $english_translator = $this->newTranslator('en_US');
+
+    PhutilTranslator::setInstance($english_translator);
     $original = PhutilTranslator::getInstance();
     $this->assertEqual('color', pht('color'));
 
+    $british_locale = PhutilLocale::loadLocale('en_GB');
+
     $british = new PhutilTranslator();
-    $british->addTranslations(
+    $british->setLocale($british_locale);
+    $british->setTranslations(
       array(
         'color' => 'colour',
       ));
@@ -133,15 +132,16 @@ final class PhutilTranslatorTestCase extends PhutilTestCase {
   }
 
   public function testFormatNumber() {
-    $translator = new PhutilTranslator();
+    $translator = $this->newTranslator('en_US');
+
     $this->assertEqual('1,234', $translator->formatNumber(1234));
     $this->assertEqual('1,234.5', $translator->formatNumber(1234.5, 1));
     $this->assertEqual('1,234.5678', $translator->formatNumber(1234.5678, 4));
 
-    $translator->addTranslations(
+    $translator->setTranslations(
       array(
         ',' => ' ',
-        '.' => ','
+        '.' => ',',
       ));
     $this->assertEqual('1 234', $translator->formatNumber(1234));
     $this->assertEqual('1 234,5', $translator->formatNumber(1234.5, 1));
@@ -149,8 +149,9 @@ final class PhutilTranslatorTestCase extends PhutilTestCase {
   }
 
   public function testNumberTranslations() {
-    $translator = new PhutilTranslator();
-    $translator->addTranslations(
+    $translator = $this->newTranslator('en_US');
+
+    $translator->setTranslations(
       array(
         '%s line(s)' => array('%s line', '%s lines'),
       ));
@@ -195,14 +196,19 @@ final class PhutilTranslatorTestCase extends PhutilTestCase {
       ),
     );
 
-    $translator = new PhutilTranslator();
+    $translator = $this->newTranslator('en_US');
+
     foreach ($tests as $original => $translations) {
       foreach ($translations as $translation => $expect) {
         $valid = ($expect ? 'valid' : 'invalid');
         $this->assertEqual(
           $expect,
           $translator->validateTranslation($original, $translation),
-          "'{$original}' should be {$valid} with '{$translation}'.");
+          pht(
+            "'%s' should be %s with '%s'.",
+            $original,
+            $valid,
+            $translation));
       }
     }
   }
@@ -211,7 +217,7 @@ final class PhutilTranslatorTestCase extends PhutilTestCase {
     $string = '%s awoke <strong>suddenly</strong> at %s.';
     $when = '<4 AM>';
 
-    $translator = new PhutilTranslator();
+    $translator = $this->newTranslator('en_US');
 
     // When no components are HTML, everything is treated as a string.
     $who = '<span>Abraham</span>';
@@ -244,6 +250,12 @@ final class PhutilTranslatorTestCase extends PhutilTestCase {
     $this->assertEqual(
       '<span>Abraham</span> awoke <strong>suddenly</strong> at 1,383,930,802.',
       $translation->getHTMLContent());
+  }
+
+  private function newTranslator($locale_code) {
+    $locale = PhutilLocale::loadLocale($locale_code);
+    return id(new PhutilTranslator())
+      ->setLocale($locale);
   }
 
 }

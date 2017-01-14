@@ -6,10 +6,11 @@
  * When invalid byte subsequences are encountered, they will be replaced with
  * U+FFFD, the Unicode replacement character.
  *
+ * This function treats overlong encodings as invalid.
+ *
  * @param   string  String to convert to valid UTF-8.
  * @return  string  String with invalid UTF-8 byte subsequences replaced with
  *                  U+FFFD.
- * @group utf8
  */
 function phutil_utf8ize($string) {
   if (phutil_is_utf8($string)) {
@@ -26,20 +27,44 @@ function phutil_utf8ize($string) {
 
   $regex =
     "/([\x01-\x7F]".
-    "|[\xC2-\xDF][\x80-\xBF]".
-    "|[\xE0-\xEF][\x80-\xBF][\x80-\xBF]".
-    "|[\xF0-\xF4][\x80-\xBF][\x80-\xBF][\x80-\xBF])".
+      "|[\xC2-\xDF][\x80-\xBF]".
+      "|[\xE0][\xA0-\xBF][\x80-\xBF]".
+      "|[\xE1-\xEF][\x80-\xBF][\x80-\xBF]".
+      "|[\xF0][\x90-\xBF][\x80-\xBF][\x80-\xBF]".
+      "|[\xF1-\xF3][\x80-\xBF][\x80-\xBF][\x80-\xBF]".
+      "|[\xF4][\x80-\x8F][\x80-\xBF][\x80-\xBF])".
     "|(.)/";
+
+  $replacement = "\xEF\xBF\xBD";
 
   $offset = 0;
   $matches = null;
   while (preg_match($regex, $string, $matches, 0, $offset)) {
     if (!isset($matches[2])) {
-      $result[] = $matches[1];
+      $match = $matches[1];
+
+      if ($match[0] == "\xED") {
+        // If this is a 3-byte character that may be part of one of the
+        // surrogate ranges, check if it's actually in those ranges. Reject
+        // it as invalid if it is. These sequences are used in UTF16 and
+        // functions like json_encode() refuse to encode them.
+
+        $codepoint = ((ord($match[0]) & 0x0F) << 12)
+                   + ((ord($match[1]) & 0x3F) << 6)
+                   + ((ord($match[2]) & 0x3F));
+        if ($codepoint >= 0xD800 && $codepoint <= 0xDFFF) {
+          $result[] = str_repeat($replacement, strlen($match));
+          $offset += strlen($matches[0]);
+          continue;
+        }
+      }
+
+      $result[] = $match;
     } else {
       // Unicode replacement character, U+FFFD.
-      $result[] = "\xEF\xBF\xBD";
+      $result[] = $replacement;
     }
+
     $offset += strlen($matches[0]);
   }
 
@@ -58,13 +83,56 @@ function phutil_utf8ize($string) {
  * @return bool   True if the string is valid UTF-8 with only BMP characters.
  */
 function phutil_is_utf8_with_only_bmp_characters($string) {
+  return phutil_is_utf8_slowly($string, $only_bmp = true);
+}
 
-  // NOTE: By default, PCRE segfaults on patterns like the one we would need
-  // to use here at very small input sizes, at least on some systems (like
-  // OS X). This is apparently because the internal implementation is recursive
-  // and it blows the stack. See <https://bugs.php.net/bug.php?id=45735> for
-  // some discussion. Since the input limit is extremely low (less than 50KB on
-  // my system), do this check very very slowly in PHP instead.
+
+/**
+ * Determine if a string is valid UTF-8.
+ *
+ * @param string  Some string which may or may not be valid UTF-8.
+ * @return bool    True if the string is valid UTF-8.
+ */
+function phutil_is_utf8($string) {
+  if (function_exists('mb_check_encoding')) {
+    // If mbstring is available, this is significantly faster than using PHP.
+    return mb_check_encoding($string, 'UTF-8');
+  }
+
+  return phutil_is_utf8_slowly($string);
+}
+
+
+/**
+ * Determine if a string is valid UTF-8, slowly.
+ *
+ * This works on any system, but has very poor performance.
+ *
+ * You should call @{function:phutil_is_utf8} instead of this function, as
+ * that function can use more performant mechanisms if they are available on
+ * the system.
+ *
+ * @param string  Some string which may or may not be valid UTF-8.
+ * @param bool    True to require all characters be part of the basic
+ *                multilingual plane (no more than 3-bytes long).
+ * @return bool   True if the string is valid UTF-8.
+ */
+function phutil_is_utf8_slowly($string, $only_bmp = false) {
+  // First, check the common case of normal ASCII strings. We're fine if
+  // the string contains no bytes larger than 127.
+  if (preg_match('/^[\x01-\x7F]+\z/', $string)) {
+    return true;
+  }
+
+  // NOTE: In the past, we used a large regular expression in the form of
+  // '(x|y|z)+' to match UTF8 strings. However, PCRE can segfaults on patterns
+  // like this at relatively small input sizes, at least on some systems
+  // (observed on OSX and Windows). This is apparently because the internal
+  // implementation is recursive and it blows the stack.
+
+  // See <https://bugs.php.net/bug.php?id=45735> for some discussion. Since the
+  // input limit is extremely low (less than 50KB on my system), do this check
+  // very very slowly in PHP instead. See also T5316.
 
   $len = strlen($string);
   for ($ii = 0; $ii < $len; $ii++) {
@@ -120,6 +188,58 @@ function phutil_is_utf8_with_only_bmp_characters($string) {
         }
       }
       return false;
+    } else if (!$only_bmp) {
+      if ($chr > 0xF0 && $chr <= 0xF4) {
+        ++$ii;
+        if ($ii >= $len) {
+          return false;
+        }
+        $chr = ord($string[$ii]);
+        if ($chr >= 0x80 && $chr <= 0xBF) {
+          ++$ii;
+          if ($ii >= $len) {
+            return false;
+          }
+          $chr = ord($string[$ii]);
+          if ($chr >= 0x80 && $chr <= 0xBF) {
+            ++$ii;
+            if ($ii >= $len) {
+              return false;
+            }
+            $chr = ord($string[$ii]);
+            if ($chr >= 0x80 && $chr <= 0xBF) {
+              continue;
+            }
+          }
+        }
+      } else if ($chr == 0xF0) {
+        ++$ii;
+        if ($ii >= $len) {
+          return false;
+        }
+        $chr = ord($string[$ii]);
+
+        // NOTE: As above, this range starts at 0x90, not 0x80. The values
+        // 0x80-0x90 are not minimal representations.
+
+        if ($chr >= 0x90 && $chr <= 0xBF) {
+          ++$ii;
+          if ($ii >= $len) {
+            return false;
+          }
+          $chr = ord($string[$ii]);
+          if ($chr >= 0x80 && $chr <= 0xBF) {
+            ++$ii;
+            if ($ii >= $len) {
+              return false;
+            }
+            $chr = ord($string[$ii]);
+            if ($chr >= 0x80 && $chr <= 0xBF) {
+              continue;
+            }
+          }
+        }
+      }
     }
 
     return false;
@@ -130,42 +250,16 @@ function phutil_is_utf8_with_only_bmp_characters($string) {
 
 
 /**
- * Determine if a string is valid UTF-8.
- *
- * @param string  Some string which may or may not be valid UTF-8.
- * @return bool    True if the string is valid UTF-8.
- * @group utf8
- */
-function phutil_is_utf8($string) {
-  if (function_exists('mb_check_encoding')) {
-    // If mbstring is available, this is significantly faster than using PHP
-    // regexps.
-    return mb_check_encoding($string, 'UTF-8');
-  }
-
-  // NOTE: This incorrectly accepts characters like \xE0\x80\x80, but should
-  // not. The MB version works correctly.
-
-  $regex =
-    "/^(".
-      "[\x01-\x7F]+".
-    "|([\xC2-\xDF][\x80-\xBF])".
-    "|([\xE0-\xEF][\x80-\xBF][\x80-\xBF])".
-    "|([\xF0-\xF4][\x80-\xBF][\x80-\xBF][\x80-\xBF]))*\$/";
-
-  return (bool)preg_match($regex, $string);
-}
-
-
-/**
  * Find the character length of a UTF-8 string.
  *
  * @param string A valid utf-8 string.
  * @return int   The character length of the string.
- * @group utf8
  */
 function phutil_utf8_strlen($string) {
-  return strlen(utf8_decode($string));
+  if (function_exists('utf8_decode')) {
+    return strlen(utf8_decode($string));
+  }
+  return count(phutil_utf8v($string));
 }
 
 
@@ -180,39 +274,53 @@ function phutil_utf8_strlen($string) {
  *
  *   http://www.cl.cam.ac.uk/~mgk25/ucs/wcwidth.c
  *
- * NOTE: We currently do not handle combining characters correctly.
- *
  * NOTE: We currently assume width 1 for East-Asian ambiguous characters.
  *
  * NOTE: This function is VERY slow.
  *
  * @param   string  A valid UTF-8 string.
  * @return  int     The console display length of the string.
- * @group   utf8
  */
 function phutil_utf8_console_strlen($string) {
-  $string_v = phutil_utf8v_codepoints($string);
+  // Formatting and colors don't contribute any width in the console.
+  $string = preg_replace("/\x1B\[\d*m/", '', $string);
+
+  // In the common case of an ASCII string, just return the string length.
+  if (preg_match('/^[\x01-\x7F]*\z/', $string)) {
+    return strlen($string);
+  }
 
   $len = 0;
-  foreach ($string_v as $c) {
-    if ($c == 0) {
-      continue;
-    }
 
-    $len += 1 +
-      ($c >= 0x1100 &&
-        ($c <= 0x115f ||                    /* Hangul Jamo init. consonants */
-          $c == 0x2329 || $c == 0x232a ||
-          ($c >= 0x2e80 && $c <= 0xa4cf &&
-            $c != 0x303f) ||                  /* CJK ... Yi */
-          ($c >= 0xac00 && $c <= 0xd7a3) || /* Hangul Syllables */
-          ($c >= 0xf900 && $c <= 0xfaff) || /* CJK Compatibility Ideographs */
-          ($c >= 0xfe10 && $c <= 0xfe19) || /* Vertical forms */
-          ($c >= 0xfe30 && $c <= 0xfe6f) || /* CJK Compatibility Forms */
-          ($c >= 0xff00 && $c <= 0xff60) || /* Fullwidth Forms */
-          ($c >= 0xffe0 && $c <= 0xffe6) ||
-          ($c >= 0x20000 && $c <= 0x2fffd) ||
-          ($c >= 0x30000 && $c <= 0x3fffd)));
+  // NOTE: To deal with combining characters, we're splitting the string into
+  // glyphs first (characters with combiners) and then counting just the width
+  // of the first character in each glyph.
+
+  $display_glyphs = phutil_utf8v_combined($string);
+  foreach ($display_glyphs as $display_glyph) {
+    $glyph_codepoints = phutil_utf8v_codepoints($display_glyph);
+    foreach ($glyph_codepoints as $c) {
+      if ($c == 0) {
+        break;
+      }
+
+      $len += 1 +
+        ($c >= 0x1100 &&
+          ($c <= 0x115F ||                    /* Hangul Jamo init. consonants */
+            $c == 0x2329 || $c == 0x232A ||
+            ($c >= 0x2E80 && $c <= 0xA4CF &&
+              $c != 0x303F) ||                  /* CJK ... Yi */
+            ($c >= 0xAC00 && $c <= 0xD7A3) || /* Hangul Syllables */
+            ($c >= 0xF900 && $c <= 0xFAFF) || /* CJK Compatibility Ideographs */
+            ($c >= 0xFE10 && $c <= 0xFE19) || /* Vertical forms */
+            ($c >= 0xFE30 && $c <= 0xFE6F) || /* CJK Compatibility Forms */
+            ($c >= 0xFF00 && $c <= 0xFF60) || /* Fullwidth Forms */
+            ($c >= 0xFFE0 && $c <= 0xFFE6) ||
+            ($c >= 0x20000 && $c <= 0x2FFFD) ||
+            ($c >= 0x30000 && $c <= 0x3FFFD)));
+
+      break;
+    }
   }
 
   return $len;
@@ -224,21 +332,28 @@ function phutil_utf8_console_strlen($string) {
  * also split.
  *
  * @param string A valid utf-8 string.
+ * @param int|null Stop processing after examining this many bytes.
  * @return list  A list of characters in the string.
- * @group utf8
  */
-function phutil_utf8v($string) {
+function phutil_utf8v($string, $byte_limit = null) {
   $res = array();
   $len = strlen($string);
+
   $ii = 0;
   while ($ii < $len) {
     $byte = $string[$ii];
     if ($byte <= "\x7F") {
       $res[] = $byte;
       $ii += 1;
+
+      if ($byte_limit && ($ii >= $byte_limit)) {
+        break;
+      }
+
       continue;
     } else if ($byte < "\xC0") {
-      throw new Exception('Invalid UTF-8 string passed to phutil_utf8v().');
+      throw new Exception(
+        pht('Invalid UTF-8 string passed to %s.', __FUNCTION__));
     } else if ($byte <= "\xDF") {
       $seq_len = 2;
     } else if ($byte <= "\xEF") {
@@ -250,20 +365,28 @@ function phutil_utf8v($string) {
     } else if ($byte <= "\xFD") {
       $seq_len = 6;
     } else {
-      throw new Exception('Invalid UTF-8 string passed to phutil_utf8v().');
+      throw new Exception(
+        pht('Invalid UTF-8 string passed to %s.', __FUNCTION__));
     }
 
     if ($ii + $seq_len > $len) {
-      throw new Exception('Invalid UTF-8 string passed to phutil_utf8v().');
+      throw new Exception(
+        pht('Invalid UTF-8 string passed to %s.', __FUNCTION__));
     }
     for ($jj = 1; $jj < $seq_len; ++$jj) {
       if ($string[$ii + $jj] >= "\xC0") {
-        throw new Exception('Invalid UTF-8 string passed to phutil_utf8v().');
+        throw new Exception(
+          pht('Invalid UTF-8 string passed to %s.', __FUNCTION__));
       }
     }
     $res[] = substr($string, $ii, $seq_len);
     $ii += $seq_len;
+
+    if ($byte_limit && ($ii >= $byte_limit)) {
+      break;
+    }
   }
+
   return $res;
 }
 
@@ -273,7 +396,6 @@ function phutil_utf8v($string) {
  *
  * @param   string  A valid UTF-8 string.
  * @return  list    A list of codepoints, as integers.
- * @group   utf8
  */
 function phutil_utf8v_codepoints($string) {
   $str_v = phutil_utf8v($string);
@@ -289,26 +411,26 @@ function phutil_utf8v_codepoints($string) {
          + ((ord($char[1]) & 0x3F));
     } else if (($c & 0xF0) == 0xE0) {
       $v = (($c & 0x0F) << 12)
-         + ((ord($char[1]) & 0x3f) << 6)
-         + ((ord($char[2]) & 0x3f));
+         + ((ord($char[1]) & 0x3F) << 6)
+         + ((ord($char[2]) & 0x3F));
     } else if (($c & 0xF8) == 0xF0) {
       $v = (($c & 0x07) << 18)
          + ((ord($char[1]) & 0x3F) << 12)
          + ((ord($char[2]) & 0x3F) << 6)
-         + ((ord($char[3]) & 0x3f));
+         + ((ord($char[3]) & 0x3F));
     } else if (($c & 0xFC) == 0xF8) {
       $v = (($c & 0x03) << 24)
          + ((ord($char[1]) & 0x3F) << 18)
          + ((ord($char[2]) & 0x3F) << 12)
-         + ((ord($char[3]) & 0x3f) << 6)
-         + ((ord($char[4]) & 0x3f));
+         + ((ord($char[3]) & 0x3F) << 6)
+         + ((ord($char[4]) & 0x3F));
     } else if (($c & 0xFE) == 0xFC) {
       $v = (($c & 0x01) << 30)
          + ((ord($char[1]) & 0x3F) << 24)
          + ((ord($char[2]) & 0x3F) << 18)
-         + ((ord($char[3]) & 0x3f) << 12)
-         + ((ord($char[4]) & 0x3f) << 6)
-         + ((ord($char[5]) & 0x3f));
+         + ((ord($char[3]) & 0x3F) << 12)
+         + ((ord($char[4]) & 0x3F) << 6)
+         + ((ord($char[5]) & 0x3F));
     }
 
     $str_v[$key] = $v;
@@ -319,104 +441,34 @@ function phutil_utf8v_codepoints($string) {
 
 
 /**
- * Shorten a string to provide a summary, respecting UTF-8 characters. This
- * function attempts to truncate strings at word boundaries.
+ * Convert a Unicode codepoint into a UTF8-encoded string.
  *
- * NOTE: This function makes a best effort to apply some reasonable rules but
- * will not work well for the full range of unicode languages.
- *
- * @param   string  UTF-8 string to shorten.
- * @param   int     Maximum length of the result.
- * @param   string  If the string is shortened, add this at the end. Defaults to
- *                  horizontal ellipsis.
- * @return  string  A string with no more than the specified character length.
- *
- * @group utf8
+ * @param int Unicode codepoint.
+ * @return string UTF8 encoding.
  */
-function phutil_utf8_shorten($string, $length, $terminal = "\xE2\x80\xA6") {
-  // If the string has fewer bytes than the minimum length, we can return
-  // it unmodified without doing any heavy lifting.
-  if (strlen($string) <= $length) {
-    return $string;
+function phutil_utf8_encode_codepoint($codepoint) {
+  if ($codepoint < 0x80) {
+    $r = chr($codepoint);
+  } else if ($codepoint < 0x800) {
+    $r = chr(0xC0 | (($codepoint >> 6)  & 0x1F)).
+         chr(0x80 | (($codepoint)       & 0x3F));
+  } else if ($codepoint < 0x10000) {
+    $r = chr(0xE0 | (($codepoint >> 12) & 0x0F)).
+         chr(0x80 | (($codepoint >> 6)  & 0x3F)).
+         chr(0x80 | (($codepoint)       & 0x3F));
+  } else if ($codepoint < 0x110000) {
+    $r = chr(0xF0 | (($codepoint >> 18) & 0x07)).
+         chr(0x80 | (($codepoint >> 12) & 0x3F)).
+         chr(0x80 | (($codepoint >> 6)  & 0x3F)).
+         chr(0x80 | (($codepoint)       & 0x3F));
+  } else {
+    throw new Exception(
+      pht(
+        'Encoding UTF8 codepoint "%s" is not supported.',
+        $codepoint));
   }
 
-  $string_v = phutil_utf8v_combined($string);
-  $string_len = count($string_v);
-
-  if ($string_len <= $length) {
-    // If the string is already shorter than the requested length, simply return
-    // it unmodified.
-    return $string;
-  }
-
-  // NOTE: This is not complete, and there are many other word boundary
-  // characters and reasonable places to break words in the UTF-8 character
-  // space. For now, this gives us reasonable behavior for latin langauges. We
-  // don't necessarily have access to PCRE+Unicode so there isn't a great way
-  // for us to look up character attributes.
-
-  // If we encounter these, prefer to break on them instead of cutting the
-  // string off in the middle of a word.
-  static $break_characters = array(
-    ' '   => true,
-    "\n"  => true,
-    ';'   => true,
-    ':'   => true,
-    '['   => true,
-    '('   => true,
-    ','   => true,
-    '-'   => true,
-  );
-
-  // If we encounter these, shorten to this character exactly without appending
-  // the terminal.
-  static $stop_characters = array(
-    '.'   => true,
-    '!'   => true,
-    '?'   => true,
-  );
-
-  // Search backward in the string, looking for reasonable places to break it.
-  $word_boundary = null;
-  $stop_boundary = null;
-
-  $terminal_len = phutil_utf8_strlen($terminal);
-
-  // If we do a word break with a terminal, we have to look beyond at least the
-  // number of characters in the terminal. If the terminal is longer than the
-  // required length, we'll skip this whole block and return it on its own
-  $terminal_area = $length - min($length, $terminal_len);
-  for ($ii = $length; $ii >= 0; $ii--) {
-    $c = $string_v[$ii];
-
-    if (isset($break_characters[$c]) && ($ii <= $terminal_area)) {
-      $word_boundary = $ii;
-    } else if (isset($stop_characters[$c]) && ($ii < $length)) {
-      $stop_boundary = $ii + 1;
-      break;
-    } else {
-      if ($word_boundary !== null) {
-        break;
-      }
-    }
-  }
-
-  if ($stop_boundary !== null) {
-    // We found a character like ".". Cut the string there, without appending
-    // the terminal.
-    $string_part = array_slice($string_v, 0, $stop_boundary);
-    return implode('', $string_part);
-  }
-
-  // If we didn't find any boundary characters or we found ONLY boundary
-  // characters, just break at the maximum character length.
-  if ($word_boundary === null || $word_boundary === 0) {
-    $word_boundary = $terminal_area;
-  }
-
-  $string_part = array_slice($string_v, 0, $word_boundary);
-  $string_part = implode('', $string_part);
-  return $string_part.$terminal;
+  return $r;
 }
 
 
@@ -425,7 +477,6 @@ function phutil_utf8_shorten($string, $length, $terminal = "\xE2\x80\xA6") {
  *
  * @param   string An HTML string with tags and entities.
  * @return  list   List of hard-wrapped lines.
- * @group utf8
  */
 function phutil_utf8_hard_wrap_html($string, $width) {
   $break_here = array();
@@ -477,12 +528,11 @@ function phutil_utf8_hard_wrap_html($string, $width) {
 }
 
 /**
-  * Hard-wrap a block of UTF-8 text with no embedded HTML tags and entitites
+  * Hard-wrap a block of UTF-8 text with no embedded HTML tags and entities.
   *
   * @param string A non HTML string
   * @param int Width of the hard-wrapped lines
   * @return list List of hard-wrapped lines.
-  * @group utf8
   */
 function phutil_utf8_hard_wrap($string, $width) {
   $result = array();
@@ -531,23 +581,23 @@ function phutil_utf8_hard_wrap($string, $width) {
  *
  * @param string String to re-encode.
  * @param string Target encoding name, like "UTF-8".
- * @param string Source endocing name, like "ISO-8859-1".
+ * @param string Source encoding name, like "ISO-8859-1".
  * @return string Input string, with converted character encoding.
- *
- * @group utf8
  *
  * @phutil-external-symbol function mb_convert_encoding
  */
 function phutil_utf8_convert($string, $to_encoding, $from_encoding) {
   if (!$from_encoding) {
     throw new InvalidArgumentException(
-      'Attempting to convert a string encoding, but no source encoding '.
-      'was provided. Explicitly provide the source encoding.');
+      pht(
+        'Attempting to convert a string encoding, but no source encoding '.
+        'was provided. Explicitly provide the source encoding.'));
   }
   if (!$to_encoding) {
     throw new InvalidArgumentException(
-      'Attempting to convert a string encoding, but no target encoding '.
-      'was provided. Explicitly provide the target encoding.');
+      pht(
+        'Attempting to convert a string encoding, but no target encoding '.
+        'was provided. Explicitly provide the target encoding.'));
   }
 
   // Normalize encoding names so we can no-op the very common case of UTF8
@@ -560,10 +610,14 @@ function phutil_utf8_convert($string, $to_encoding, $from_encoding) {
 
   if (!function_exists('mb_convert_encoding')) {
     throw new Exception(
-      "Attempting to convert a string encoding from '{$from_encoding}' ".
-      "to '{$to_encoding}', but the 'mbstring' PHP extension is not ".
-      "available. Install mbstring to work with encodings other than ".
-      "UTF-8.");
+      pht(
+        "Attempting to convert a string encoding from '%s' to '%s', ".
+        "but the '%s' PHP extension is not available. Install %s to ".
+        "work with encodings other than UTF-8.",
+        $from_encoding,
+        $to_encoding,
+        'mbstring',
+        'mbstring'));
   }
 
   $result = @mb_convert_encoding($string, $to_encoding, $from_encoding);
@@ -571,11 +625,14 @@ function phutil_utf8_convert($string, $to_encoding, $from_encoding) {
   if ($result === false) {
     $message = error_get_last();
     if ($message) {
-      $message = idx($message, 'message', 'Unknown error.');
+      $message = idx($message, 'message', pht('Unknown error.'));
     }
     throw new Exception(
-      "String conversion from encoding '{$from_encoding}' to encoding ".
-      "'{$to_encoding}' failed: {$message}");
+      pht(
+        "String conversion from encoding '%s' to encoding '%s' failed: %s",
+        $from_encoding,
+        $to_encoding,
+        $message));
   }
 
   return $result;
@@ -584,14 +641,12 @@ function phutil_utf8_convert($string, $to_encoding, $from_encoding) {
 
 /**
  * Convert a string to title case in a UTF8-aware way. This function doesn't
- * necessarily do a great job, but the builtin implementation of ucwords() can
+ * necessarily do a great job, but the builtin implementation of `ucwords()` can
  * completely destroy inputs, so it just has to be better than that. Similar to
  * @{function:ucwords}.
  *
  * @param   string  UTF-8 input string.
  * @return  string  Input, in some semblance of title case.
- *
- * @group utf8
  */
 function phutil_utf8_ucwords($str) {
   // NOTE: mb_convert_case() discards uppercase letters in words when converting
@@ -633,8 +688,6 @@ function phutil_utf8_ucwords($str) {
  * @param   string  UTF-8 input string.
  * @return  string  Input, in some semblance of lower case.
  *
- * @group utf8
- *
  * @phutil-external-symbol function mb_convert_case
  */
 function phutil_utf8_strtolower($str) {
@@ -659,8 +712,6 @@ function phutil_utf8_strtolower($str) {
  *
  * @param   string  UTF-8 input string.
  * @return  string  Input, in some semblance of upper case.
- *
- * @group utf8
  *
  * @phutil-external-symbol function mb_convert_case
  */
@@ -687,8 +738,6 @@ function phutil_utf8_strtoupper($str) {
  * @param   string              UTF-8 input string.
  * @param   map<string, string> Map of characters to replace.
  * @return  string              Input with translated characters.
- *
- * @group utf8
  */
 function phutil_utf8_strtr($str, array $map) {
   $v = phutil_utf8v($str);
@@ -709,10 +758,7 @@ function phutil_utf8_strtr($str, array $map) {
  *
  * @param   string              A single unicode character.
  * @return  boolean             True or false.
- *
- * @group utf8
  */
-
 function phutil_utf8_is_combining_character($character) {
   $components = phutil_utf8v_codepoints($character);
 
@@ -733,42 +779,63 @@ function phutil_utf8_is_combining_character($character) {
   return false;
 }
 
+
 /**
  * Split a UTF-8 string into an array of characters. Combining characters
  * are not split.
  *
  * @param string A valid utf-8 string.
  * @return list  A list of characters in the string.
- *
- * @group utf8
  */
-
 function phutil_utf8v_combined($string) {
   $components = phutil_utf8v($string);
-  $array_length = count($components);
+  return phutil_utf8v_combine_characters($components);
+}
 
-  // If the first character in the string is a combining character,
-  // prepend a space to the string.
-  if (
-    $array_length > 0 &&
-    phutil_utf8_is_combining_character($components[0])) {
-    $string = ' '.$string;
-    $components = phutil_utf8v($string);
-    $array_length++;
+
+/**
+ * Merge combining characters in a UTF-8 string.
+ *
+ * This is a low-level method which can allow other operations to do less work.
+ * If you have a string, call @{method:phutil_utf8v_combined} instead.
+ *
+ * @param list List of UTF-8 characters.
+ * @return list List of UTF-8 strings with combining characters merged.
+ */
+function phutil_utf8v_combine_characters(array $characters) {
+  if (!$characters) {
+    return array();
   }
 
-  for ($index = 1; $index < $array_length; $index++) {
-    if (phutil_utf8_is_combining_character($components[$index])) {
-      $components[$index - 1] =
-        $components[$index - 1].$components[$index];
+  // If the first character in the string is a combining character,
+  // start with a space.
+  if (phutil_utf8_is_combining_character($characters[0])) {
+    $buf = ' ';
+  } else {
+    $buf = null;
+  }
 
-      unset($components[$index]);
-      $components = array_values($components);
+  $parts = array();
+  foreach ($characters as $character) {
+    if (!isset($character[1])) {
+      // This an optimization: there are no one-byte combining characters,
+      // so we can just pass these through unmodified.
+      $is_combining = false;
+    } else {
+      $is_combining = phutil_utf8_is_combining_character($character);
+    }
 
-      $index --;
-      $array_length = count($components);
+    if ($is_combining) {
+      $buf .= $character;
+    } else {
+      if ($buf !== null) {
+        $parts[] = $buf;
+      }
+      $buf = $character;
     }
   }
 
-  return $components;
+  $parts[] = $buf;
+
+  return $parts;
 }

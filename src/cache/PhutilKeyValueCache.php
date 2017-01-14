@@ -6,9 +6,8 @@
  * with PhutilServiceProfiler.
  *
  * @task  kvimpl    Key-Value Cache Implementation
- * @group cache
  */
-abstract class PhutilKeyValueCache {
+abstract class PhutilKeyValueCache extends Phobject {
 
 
 /* -(  Key-Value Cache Implementation  )------------------------------------- */

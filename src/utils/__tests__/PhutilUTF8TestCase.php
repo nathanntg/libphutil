@@ -2,8 +2,6 @@
 
 /**
  * Test cases for functions in utf8.php.
- *
- * @group testcase
  */
 final class PhutilUTF8TestCase extends PhutilTestCase {
 
@@ -42,6 +40,68 @@ final class PhutilUTF8TestCase extends PhutilTestCase {
     $expect = "M(o\xEF\xBF\xBD\xEF\xBF\xBD\xEF\xBF\xBDo)M";
     $result = phutil_utf8ize($input);
     $this->assertEqual($expect, $result);
+  }
+
+  public function testOverlongFormFiltering() {
+    $bad = "\xEF\xBF\xBD";
+
+    $map = array(
+      'quack' => 'quack',
+
+      // This is U+1000, a valid character.
+      "\xE1\x80\x80" => "\xE1\x80\x80",
+
+      // This is a 2-byte encoding of U+0000.
+      "\xC0\x80" => "{$bad}{$bad}",
+
+      // This is a 3-byte encoding of U+0020.
+      "\xE0\x80\xA0" => "{$bad}{$bad}{$bad}",
+
+      "A \xE0\x83\x83" => "A {$bad}{$bad}{$bad}",
+    );
+
+    foreach ($map as $input => $expect) {
+      $actual = phutil_utf8ize($input);
+      $this->assertEqual(
+        $expect,
+        $actual,
+        pht('Overlong form canonicalization of: %s', $input));
+    }
+  }
+
+  public function testSurrogateFiltering() {
+    $bad = "\xEF\xBF\xBD";
+
+    $map = array(
+      "A \xED\xA9\x98" => "A {$bad}{$bad}{$bad}",
+    );
+
+    foreach ($map as $input => $expect) {
+      $actual = phutil_utf8ize($input);
+      $this->assertEqual(
+        $expect,
+        $actual,
+        pht('Surrogate filtering: %s', $input));
+    }
+  }
+
+
+  public function testUTF8CodepointEncoding() {
+    $map = array(
+      0x20 => ' ',
+      0x7E => '~',
+      0xE9 => "\xC3\xA9",
+      0x2603 => "\xE2\x98\x83",
+      0x1F417 => "\xF0\x9F\x90\x97",
+    );
+
+    foreach ($map as $input => $expect) {
+      $actual = phutil_utf8_encode_codepoint($input);
+      $this->assertEqual(
+        $expect,
+        $actual,
+        pht('UTF8 codepoint encoding of "%s".', $input));
+    }
   }
 
   public function testUTF8len() {
@@ -92,7 +152,7 @@ final class PhutilUTF8TestCase extends PhutilTestCase {
       $this->assertEqual(
         $expect,
         phutil_utf8v_codepoints($str),
-        'Codepoint Vector of '.$str);
+        pht('Codepoint Vector of %s', $str));
     }
   }
 
@@ -104,12 +164,22 @@ final class PhutilUTF8TestCase extends PhutilTestCase {
 
       // Double-width chinese character.
       "\xe6\x9d\xb1"  => 2,
+
+      // Combining character.
+      "x\xCD\xA0y"    => 2,
+
+      // Combining plus double-width.
+      "\xe6\x9d\xb1\xCD\xA0y"  => 3,
+
+      // Colors and formatting.
+      "\x1B[1mx\x1B[m" => 1,
+      "\x1B[1m\x1B[31mx\x1B[m" => 1,
     );
     foreach ($strings as $str => $expect) {
       $this->assertEqual(
         $expect,
         phutil_utf8_console_strlen($str),
-        'Console Length of '.$str);
+        pht('Console Length of %s', $str));
     }
   }
 
@@ -125,7 +195,11 @@ final class PhutilUTF8TestCase extends PhutilTestCase {
       array('111111', 5, '2222', '12222'),
 
       array('D1rp. Derp derp.', 7, '...', 'D1rp.'),
-      array('D2rp. Derp derp.', 5, '...', 'D2rp.'),
+
+      // "D2rp." is a better shortening of this, but it's dramatically more
+      // complicated to implement with the newer byte/glyph/character
+      // shortening code.
+      array('D2rp. Derp derp.', 5, '...', 'D2...'),
       array('D3rp. Derp derp.', 4, '...', 'D...'),
       array('D4rp. Derp derp.', 14, '...', 'D4rp. Derp...'),
       array('D5rpderp, derp derp', 16, '...', 'D5rpderp...'),
@@ -137,8 +211,12 @@ final class PhutilUTF8TestCase extends PhutilTestCase {
 
       // This behavior is maybe a little bad, but it seems mostly reasonable,
       // at least for latin languages.
-      array('Derp, supercalafragalisticexpialadoshus', 30, '...',
-              'Derp...'),
+      array(
+        'Derp, supercalafragalisticexpialadoshus',
+        30,
+        '...',
+        'Derp...',
+      ),
 
       // If a string has only word-break characters in it, we should just cut
       // it, not produce only the terminal.
@@ -150,10 +228,94 @@ final class PhutilUTF8TestCase extends PhutilTestCase {
 
     foreach ($inputs as $input) {
       list($string, $length, $terminal, $expect) = $input;
-      $result = phutil_utf8_shorten($string, $length, $terminal);
-      $this->assertEqual($expect, $result, 'Shortening of '.$string);
+      $result = id(new PhutilUTF8StringTruncator())
+        ->setMaximumGlyphs($length)
+        ->setTerminator($terminal)
+        ->truncateString($string);
+      $this->assertEqual($expect, $result, pht('Shortening of %s', $string));
     }
+  }
 
+  public function testUTF8StringTruncator() {
+    $cases = array(
+      array(
+        "o\xCD\xA0o\xCD\xA0o\xCD\xA0o\xCD\xA0o\xCD\xA0",
+        6,
+        "o\xCD\xA0!",
+        6,
+        "o\xCD\xA0o\xCD\xA0!",
+        6,
+        "o\xCD\xA0o\xCD\xA0o\xCD\xA0o\xCD\xA0o\xCD\xA0",
+      ),
+      array(
+        "X\xCD\xA0\xCD\xA0\xCD\xA0Y",
+        6,
+        '!',
+        6,
+        "X\xCD\xA0\xCD\xA0\xCD\xA0Y",
+        6,
+        "X\xCD\xA0\xCD\xA0\xCD\xA0Y",
+      ),
+      array(
+        "X\xCD\xA0\xCD\xA0\xCD\xA0YZ",
+        6,
+        '!',
+        5,
+        "X\xCD\xA0\xCD\xA0\xCD\xA0!",
+        2,
+        "X\xCD\xA0\xCD\xA0\xCD\xA0!",
+      ),
+      array(
+        "\xE2\x98\x83\xE2\x98\x83\xE2\x98\x83\xE2\x98\x83",
+        4,
+        "\xE2\x98\x83!",
+        3,
+        "\xE2\x98\x83\xE2\x98\x83!",
+        3,
+        "\xE2\x98\x83\xE2\x98\x83!",
+      ),
+    );
+
+    foreach ($cases as $case) {
+      list($input, $b_len, $b_out, $p_len, $p_out, $g_len, $g_out) = $case;
+
+      $result = id(new PhutilUTF8StringTruncator())
+        ->setMaximumBytes($b_len)
+        ->setTerminator('!')
+        ->truncateString($input);
+      $this->assertEqual($b_out, $result, pht('byte-short of %s', $input));
+
+      $result = id(new PhutilUTF8StringTruncator())
+        ->setMaximumCodepoints($p_len)
+        ->setTerminator('!')
+        ->truncateString($input);
+      $this->assertEqual($p_out, $result, pht('codepoint-short of %s', $input));
+
+      $result = id(new PhutilUTF8StringTruncator())
+        ->setMaximumGlyphs($g_len)
+        ->setTerminator('!')
+        ->truncateString($input);
+      $this->assertEqual($g_out, $result, pht('glyph-short of %s', $input));
+    }
+  }
+
+  public function testUTF8LargeTruncation() {
+    // This is testing that our performance is reasonable when truncating a
+    // large input into a small output. Runtime should be on the order of the
+    // output size, not the input size.
+
+    $whale = "\xF0\x9F\x90\xB3";
+    $input = str_repeat($whale, 1024 * 1024);
+
+    $result = id(new PhutilUTF8StringTruncator())
+      ->setMaximumBytes(16)
+      ->setTerminator('!')
+      ->truncateString($input);
+
+    $this->assertEqual(
+      str_repeat($whale, 3).'!',
+      $result,
+      pht('Large truncation.'));
   }
 
   public function testUTF8Wrap() {
@@ -165,7 +327,8 @@ final class PhutilUTF8TestCase extends PhutilTestCase {
           'aaa',
           'aaa',
           'a',
-        )),
+        ),
+      ),
       array(
         'aa<b>aaaaa',
         3,
@@ -173,7 +336,8 @@ final class PhutilUTF8TestCase extends PhutilTestCase {
           'aa<b>a',
           'aaa',
           'a',
-        )),
+        ),
+      ),
       array(
         'aa&amp;aaaa',
         3,
@@ -181,7 +345,8 @@ final class PhutilUTF8TestCase extends PhutilTestCase {
           'aa&amp;',
           'aaa',
           'a',
-        )),
+        ),
+      ),
       array(
         "aa\xe6\x9d\xb1aaaa",
         3,
@@ -189,18 +354,21 @@ final class PhutilUTF8TestCase extends PhutilTestCase {
           "aa\xe6\x9d\xb1",
           'aaa',
           'a',
-        )),
+        ),
+      ),
       array(
         '',
         80,
         array(
-        )),
+        ),
+      ),
       array(
         'a',
         80,
         array(
           'a',
-        )),
+        ),
+      ),
     );
 
     foreach ($inputs as $input) {
@@ -208,7 +376,7 @@ final class PhutilUTF8TestCase extends PhutilTestCase {
       $this->assertEqual(
         $expect,
         phutil_utf8_hard_wrap_html($string, $width),
-        "Wrapping of '".$string."'");
+        pht("Wrapping of '%s'.", $string));
     }
   }
 
@@ -221,7 +389,8 @@ final class PhutilUTF8TestCase extends PhutilTestCase {
           'aaa',
           'aaa',
           'a',
-        )),
+        ),
+      ),
       array(
         'abracadabra!',
         4,
@@ -229,18 +398,21 @@ final class PhutilUTF8TestCase extends PhutilTestCase {
           'abra',
           'cada',
           'bra!',
-        )),
+        ),
+      ),
       array(
         '',
         10,
         array(
-        )),
+        ),
+      ),
       array(
         'a',
         20,
         array(
           'a',
-        )),
+        ),
+      ),
       array(
         "aa\xe6\x9d\xb1aaaa",
         3,
@@ -248,7 +420,8 @@ final class PhutilUTF8TestCase extends PhutilTestCase {
           "aa\xe6\x9d\xb1",
           'aaa',
           'a',
-        )),
+        ),
+      ),
       array(
         "mmm\nmmm\nmmmm",
         3,
@@ -257,7 +430,8 @@ final class PhutilUTF8TestCase extends PhutilTestCase {
           'mmm',
           'mmm',
           'm',
-        )),
+        ),
+      ),
     );
 
     foreach ($inputs as $input) {
@@ -265,10 +439,9 @@ final class PhutilUTF8TestCase extends PhutilTestCase {
       $this->assertEqual(
         $expect,
         phutil_utf8_hard_wrap($string, $width),
-        "Wrapping of '".$string."'");
+        pht("Wrapping of '%s'", $string));
     }
   }
-
 
   public function testUTF8ConvertParams() {
     $caught = null;
@@ -277,7 +450,7 @@ final class PhutilUTF8TestCase extends PhutilTestCase {
     } catch (Exception $ex) {
       $caught = $ex;
     }
-    $this->assertTrue((bool)$caught, 'Requires source encoding.');
+    $this->assertTrue((bool)$caught, pht('Requires source encoding.'));
 
     $caught = null;
     try {
@@ -285,13 +458,13 @@ final class PhutilUTF8TestCase extends PhutilTestCase {
     } catch (Exception $ex) {
       $caught = $ex;
     }
-    $this->assertTrue((bool)$caught, 'Requires target encoding.');
+    $this->assertTrue((bool)$caught, pht('Requires target encoding.'));
   }
 
 
   public function testUTF8Convert() {
     if (!function_exists('mb_convert_encoding')) {
-      $this->assertSkipped('Requires mbstring extension.');
+      $this->assertSkipped(pht('Requires %s extension.', 'mbstring'));
     }
 
     // "[ae]gis se[n]or [(c)] 1970 [+/-] 1 [degree]"
@@ -299,8 +472,7 @@ final class PhutilUTF8TestCase extends PhutilTestCase {
     $expect = "\xC3\xA6gis SE\xC3\x91OR \xC2\xA9 1970 \xC2\xB11\xC2\xB0";
     $output = phutil_utf8_convert($input, 'UTF-8', 'ISO-8859-1');
 
-    $this->assertEqual($expect, $output, 'Conversion from ISO-8859-1.');
-
+    $this->assertEqual($expect, $output, pht('Conversion from ISO-8859-1.'));
 
     $caught = null;
     try {
@@ -309,7 +481,7 @@ final class PhutilUTF8TestCase extends PhutilTestCase {
       $caught = $ex;
     }
 
-    $this->assertTrue((bool)$caught, 'Conversion with bogus encoding.');
+    $this->assertTrue((bool)$caught, pht('Conversion with bogus encoding.'));
   }
 
 
@@ -329,7 +501,6 @@ final class PhutilUTF8TestCase extends PhutilTestCase {
         'phutil_utf8_ucwords("'.$input.'")');
     }
   }
-
 
   public function testUTF8strtolower() {
     $tests = array(
@@ -427,7 +598,6 @@ final class PhutilUTF8TestCase extends PhutilTestCase {
     $this->assertEqual(
       array(" \xCD\xA0\xCD\xA0", 'c'),
       phutil_utf8v_combined($string));
-
   }
 
   public function testUTF8BMPSegfaults() {
@@ -441,39 +611,110 @@ final class PhutilUTF8TestCase extends PhutilTestCase {
 
   public function testUTF8BMP() {
     $tests = array(
-      ''  => array(true, true, 'empty string'),
-      'a' => array(true, true, 'a'),
-      "a\xCD\xA0\xCD\xA0" => array(true, true, 'a with combining'),
-      "\xE2\x98\x83" => array(true, true, 'snowman'),
+      ''  => array(
+        true,
+        true,
+        pht('empty string'),
+      ),
+      'a' => array(
+        true,
+        true,
+        'a',
+      ),
+      "a\xCD\xA0\xCD\xA0" => array(
+        true,
+        true,
+        pht('%s with combining', 'a'),
+      ),
+      "\xE2\x98\x83" => array(
+        true,
+        true,
+        pht('snowman'),
+      ),
 
       // This is the last character in BMP, U+FFFF.
-      "\xEF\xBF\xBF" => array(true, true, 'U+FFFF'),
+      "\xEF\xBF\xBF" => array(
+        true,
+        true,
+        'U+FFFF',
+      ),
 
       // This isn't valid.
-      "\xEF\xBF\xC0" => array(false, false, 'Invalid, byte range.'),
+      "\xEF\xBF\xC0" => array(
+        false,
+        false,
+        pht('Invalid, byte range.'),
+      ),
+
+      // This is an invalid nonminimal representation.
+      "\xF0\x81\x80\x80" => array(
+        false,
+        false,
+        pht('Nonminimal 4-byte character.'),
+      ),
 
       // This is the first character above BMP, U+10000.
-      "\xF0\x90\x80\x80" => array(true, false, 'U+10000'),
-      "\xF0\x9D\x84\x9E" => array(true, false, 'gclef'),
+      "\xF0\x90\x80\x80" => array(
+        true,
+        false,
+        'U+10000',
+      ),
+      "\xF0\x9D\x84\x9E" => array(
+        true,
+        false,
+        'gclef',
+      ),
 
-      "musical \xF0\x9D\x84\x9E g-clef" => array(true, false, 'gclef text'),
-      "\xF0\x9D\x84" => array(false, false, 'Invalid, truncated.'),
+      "musical \xF0\x9D\x84\x9E g-clef" => array(
+        true,
+        false,
+        pht('gclef text'),
+      ),
+      "\xF0\x9D\x84" => array(
+        false,
+        false,
+        pht('Invalid, truncated.'),
+      ),
 
-      "\xE0\x80\x80" => array(false, false, 'Nonminimal 3-byte character.'),
+      "\xE0\x80\x80" => array(
+        false,
+        false,
+        pht('Nonminimal 3-byte character.'),
+      ),
 
       // Partial BMP characters.
-      "\xCD" => array(false, false, 'Partial 2-byte character.'),
-      "\xE0\xA0" => array(false, false, 'Partial BMP 0xE0 character.'),
-      "\xE2\x98" => array(false, false, 'Partial BMP cahracter.'),
+      "\xCD" => array(
+        false,
+        false,
+        pht('Partial 2-byte character.'),
+      ),
+      "\xE0\xA0" => array(
+        false,
+        false,
+        pht('Partial BMP 0xE0 character.'),
+      ),
+      "\xE2\x98" => array(
+        false,
+        false,
+        pht('Partial BMP cahracter.'),
+      ),
     );
 
     foreach ($tests as $input => $test) {
       list($expect_utf8, $expect_bmp, $test_name) = $test;
 
+      // Depending on what's installed on the system, this may use an
+      // extension.
       $this->assertEqual(
         $expect_utf8,
         phutil_is_utf8($input),
         pht('is_utf(%s)', $test_name));
+
+      // Also test this against the pure PHP implementation, explicitly.
+      $this->assertEqual(
+        $expect_utf8,
+        phutil_is_utf8_slowly($input),
+        pht('is_utf_slowly(%s)', $test_name));
 
       $this->assertEqual(
         $expect_bmp,

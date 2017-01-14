@@ -1,8 +1,5 @@
 <?php
 
-/**
- * @group aws
- */
 final class PhutilAWSException extends Exception {
 
   private $httpStatus;
@@ -15,21 +12,21 @@ final class PhutilAWSException extends Exception {
     $this->params = $params;
 
     $desc = array();
-    $desc[] = 'AWS Request Failed';
-    $desc[] = 'HTTP Status Code: '.$http_status;
+    $desc[] = pht('AWS Request Failed');
+    $desc[] = pht('HTTP Status Code: %d', $http_status);
 
     if ($this->requestID) {
-      $desc[] = 'AWS Request ID: '.$this->requestID;
+      $desc[] = pht('AWS Request ID: %s', $this->requestID);
       $errors = idx($params, 'Errors');
       if ($errors) {
-        $desc[] = 'AWS Errors:';
+        $desc[] = pht('AWS Errors:');
         foreach ($errors as $error) {
           list($code, $message) = $error;
           $desc[] = "    - {$code}: {$message}\n";
         }
       }
     } else {
-      $desc[] = 'Response Body: '.idx($params, 'body');
+      $desc[] = pht('Response Body: %s', idx($params, 'body'));
     }
 
     $desc = implode("\n", $desc);
