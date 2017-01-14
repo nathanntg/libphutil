@@ -54,14 +54,14 @@ function idx(array $array, $key, $default = null) {
  *
  * For example, `idxv($dict, array('a', 'b', 'c'))` accesses the key at
  * `$dict['a']['b']['c']`, if it exists. If it does not, or any intermediate
- * value is not itself an array, it returns the defualt value.
+ * value is not itself an array, it returns the default value.
  *
  * @param array Array to access.
- * @param list<string> List of keys to access, in sequence.
+ * @param iterable List of keys to access, in sequence.
  * @param wild Default value to return.
  * @return wild Accessed value, or default if the value is not accessible.
  */
-function idxv(array $map, array $path, $default = null) {
+function idxv(array $map, iterable $path, $default = null) {
   if (!$path) {
     return $default;
   }
@@ -125,7 +125,7 @@ function idxv(array $map, array $path, $default = null) {
  * See also @{function:ipull}, which works similarly but accesses array indexes
  * instead of calling methods.
  *
- * @param   list          Some list of objects.
+ * @param   iterable          Some list of objects.
  * @param   string|null   Determines which **values** will appear in the result
  *                        array. Use a string like 'getName' to store the
  *                        value of calling the named method in each value, or
@@ -137,7 +137,7 @@ function idxv(array $map, array $path, $default = null) {
  * @return  dict          A dictionary with keys and values derived according
  *                        to whatever you passed as `$method` and `$key_method`.
  */
-function mpull(array $list, $method, $key_method = null) {
+function mpull(iterable $list, $method, $key_method = null) {
   $result = array();
   foreach ($list as $key => $object) {
     if ($key_method !== null) {
@@ -198,7 +198,7 @@ function mpull(array $list, $method, $key_method = null) {
  * See also @{function:mpull}, which works similarly but calls object methods
  * instead of accessing object properties.
  *
- * @param   list          Some list of objects.
+ * @param   iterable          Some list of objects.
  * @param   string|null   Determines which **values** will appear in the result
  *                        array. Use a string like 'name' to store the value of
  *                        accessing the named property in each value, or
@@ -211,7 +211,7 @@ function mpull(array $list, $method, $key_method = null) {
  *                        to whatever you passed as `$property` and
  *                        `$key_property`.
  */
-function ppull(array $list, $property, $key_property = null) {
+function ppull(iterable $list, $property, $key_property = null) {
   $result = array();
   foreach ($list as $key => $object) {
     if ($key_property !== null) {
@@ -248,7 +248,7 @@ function ppull(array $list, $property, $key_property = null) {
  *
  * See @{function:mpull} for more usage examples.
  *
- * @param   list          Some list of arrays.
+ * @param   iterable          Some list of arrays.
  * @param   scalar|null   Determines which **values** will appear in the result
  *                        array. Use a scalar to select that index from each
  *                        array, or null to preserve the arrays unmodified as
@@ -259,7 +259,7 @@ function ppull(array $list, $property, $key_property = null) {
  * @return  dict          A dictionary with keys and values derived according
  *                        to whatever you passed for `$index` and `$key_index`.
  */
-function ipull(array $list, $index, $key_index = null) {
+function ipull(iterable $list, $index, $key_index = null) {
   $result = array();
   foreach ($list as $key => $array) {
     if ($key_index !== null) {
@@ -299,7 +299,7 @@ function ipull(array $list, $index, $key_index = null) {
  * See also @{function:igroup}, which works the same way but operates on
  * array indexes.
  *
- * @param   list    List of objects to group by some property.
+ * @param   iterable    List of objects to group by some property.
  * @param   string  Name of a method, like 'getType', to call on each object
  *                  in order to determine which group it should be placed into.
  * @param   ...     Zero or more additional method names, to subgroup the
@@ -307,7 +307,7 @@ function ipull(array $list, $index, $key_index = null) {
  * @return  dict    Dictionary mapping distinct method returns to lists of
  *                  all objects which returned that value.
  */
-function mgroup(array $list, $by /* , ... */) {
+function mgroup(iterable $list, $by /* , ... */) {
   $map = mpull($list, $by);
 
   $groups = array();
@@ -339,7 +339,7 @@ function mgroup(array $list, $by /* , ... */) {
  * as @{function:mgroup}, except it operates on the values of array indexes
  * rather than the return values of method calls.
  *
- * @param   list    List of arrays to group by some index value.
+ * @param   iterable    List of arrays to group by some index value.
  * @param   string  Name of an index to select from each array in order to
  *                  determine which group it should be placed into.
  * @param   ...     Zero or more additional indexes names, to subgroup the
@@ -347,7 +347,7 @@ function mgroup(array $list, $by /* , ... */) {
  * @return  dict    Dictionary mapping distinct index values to lists of
  *                  all objects which had that value at the index.
  */
-function igroup(array $list, $by /* , ... */) {
+function igroup(iterable $list, $by /* , ... */) {
   $map = ipull($list, $by);
 
   $groups = array();
@@ -386,12 +386,12 @@ function igroup(array $list, $by /* , ... */) {
  *
  * NOTE: This method does not take the list by reference; it returns a new list.
  *
- * @param   list    List of objects to sort by some property.
+ * @param   iterable    List of objects to sort by some property.
  * @param   string  Name of a method to call on each object; the return values
  *                  will be used to sort the list.
  * @return  list    Objects ordered by the return values of the method calls.
  */
-function msort(array $list, $method) {
+function msort(iterable $list, $method) {
   $surrogate = mpull($list, $method);
 
   asort($surrogate);
@@ -410,12 +410,12 @@ function msort(array $list, $method) {
  *
  * This sort is stable, well-behaved, and more efficient than `usort()`.
  *
- * @param list List of objects to sort.
+ * @param iterable List of objects to sort.
  * @param string Name of a method to call on each object. The method must
  *   return a @{class:PhutilSortVector}.
  * @return list Objects ordered by the vectors.
  */
-function msortv(array $list, $method) {
+function msortv(iterable $list, $method) {
   $surrogate = mpull($list, $method);
 
   $index = 0;
@@ -454,12 +454,12 @@ function msortv(array $list, $method) {
  * @{function:msort}, but operates on a list of arrays instead of a list of
  * objects.
  *
- * @param   list    List of arrays to sort by some index value.
+ * @param   iterable    List of arrays to sort by some index value.
  * @param   string  Index to access on each object; the return values
  *                  will be used to sort the list.
  * @return  list    Arrays ordered by the index values.
  */
-function isort(array $list, $index) {
+function isort(iterable $list, $index) {
   $surrogate = ipull($list, $index);
 
   asort($surrogate);
@@ -489,13 +489,13 @@ function isort(array $list, $index) {
  *
  *   mfilter($list, 'hasChildren', true);
  *
- * @param  array        List of objects to filter.
+ * @param  iterable        List of objects to filter.
  * @param  string       A method name.
  * @param  bool         Optionally, pass true to drop objects which pass the
  *                      filter instead of keeping them.
  * @return array        List of objects which pass the filter.
  */
-function mfilter(array $list, $method, $negate = false) {
+function mfilter(iterable $list, $method, $negate = false) {
   if (!is_string($method)) {
     throw new InvalidArgumentException(pht('Argument method is not a string.'));
   }
@@ -534,13 +534,13 @@ function mfilter(array $list, $method, $negate = false) {
  *
  *   ifilter($list, 'username', true);
  *
- * @param  array        List of arrays to filter.
+ * @param  iterable        List of arrays to filter.
  * @param  scalar       The index.
  * @param  bool         Optionally, pass true to drop arrays which pass the
  *                      filter instead of keeping them.
  * @return array        List of arrays which pass the filter.
  */
-function ifilter(array $list, $index, $negate = false) {
+function ifilter(iterable $list, $index, $negate = false) {
   if (!is_scalar($index)) {
     throw new InvalidArgumentException(pht('Argument index is not a scalar.'));
   }
@@ -574,12 +574,12 @@ function ifilter(array $list, $index, $negate = false) {
  * key order on an existing dictionary.
  *
  * @param  dict    Dictionary of key-value pairs to select from.
- * @param  list    List of keys to select.
+ * @param  iterable    List of keys to select.
  * @return dict    Dictionary of only those key-value pairs where the key was
  *                 present in the list of keys to select. Ordering is
  *                 determined by the list order.
  */
-function array_select_keys(array $dict, array $keys) {
+function array_select_keys(array $dict, iterable $keys) {
   $result = array();
   foreach ($keys as $key) {
     if (array_key_exists($key, $dict)) {
@@ -594,11 +594,11 @@ function array_select_keys(array $dict, array $keys) {
  * Checks if all values of array are instances of the passed class. Throws
  * `InvalidArgumentException` if it isn't true for any value.
  *
- * @param  array
+ * @param  iterable
  * @param  string  Name of the class or 'array' to check arrays.
- * @return array   Returns passed array.
+ * @return iterable   Returns passed array.
  */
-function assert_instances_of(array $arr, $class) {
+function assert_instances_of(iterable $arr, $class) {
   $is_array = !strcasecmp($class, 'array');
 
   foreach ($arr as $key => $object) {
